@@ -1,22 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2011 by Mathias Kuester                                 *
  *   Mathias Kuester <kesmtp@freenet.de>                                   *
  *                                                                         *
  *   Copyright (C) 2012 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -29,7 +18,6 @@
 #include <transport/transport.h>
 #include <helper/time_support.h>
 #include <target/target.h>
-#include <jtag/hla/hla_tcl.h>
 #include <jtag/hla/hla_transport.h>
 #include <jtag/hla/hla_interface.h>
 
@@ -49,8 +37,16 @@ static const struct command_registration hl_swd_transport_subcommand_handlers[] 
 	{
 	 .name = "newdap",
 	 .mode = COMMAND_CONFIG,
-	 .jim_handler = jim_hl_newtap,
+	 .handler = handle_jtag_newtap,
 	 .help = "declare a new SWD DAP",
+	 .usage = "basename dap_type ['-irlen' count] "
+			"['-enable'|'-disable'] "
+			"['-expected_id' number] "
+			"['-ignore-version'] "
+			"['-ignore-bypass'] "
+			"['-ircapture' number] "
+			"['-ir-bypass' number] "
+			"['-mask' number]",
 	 },
 	COMMAND_REGISTRATION_DONE
 };
@@ -70,11 +66,17 @@ static const struct command_registration hl_transport_jtag_subcommand_handlers[]
 	{
 	 .name = "newtap",
 	 .mode = COMMAND_CONFIG,
-	 .jim_handler = jim_hl_newtap,
+	 .handler = handle_jtag_newtap,
 	 .help = "Create a new TAP instance named basename.tap_type, "
 	 "and appends it to the scan chain.",
 	 .usage = "basename tap_type '-irlen' count "
-	 "['-expected_id' number]",
+			"['-enable'|'-disable'] "
+			"['-expected_id' number] "
+			"['-ignore-version'] "
+			"['-ignore-bypass'] "
+			"['-ircapture' number] "
+			"['-ir-bypass' number] "
+			"['-mask' number]",
 	 },
 	{
 	 .name = "init",
@@ -97,12 +99,18 @@ static const struct command_registration hl_transport_jtag_subcommand_handlers[]
 	{
 	 .name = "tapisenabled",
 	 .mode = COMMAND_EXEC,
-	 .jim_handler = jim_jtag_tap_enabler,
+	 .handler = handle_jtag_tap_enabler,
+	 .help = "Returns a Tcl boolean (0/1) indicating whether "
+		"the TAP is enabled (1) or not (0).",
+	 .usage = "tap_name",
 	 },
 	{
 	 .name = "tapenable",
 	 .mode = COMMAND_EXEC,
-	 .jim_handler = jim_jtag_tap_enabler,
+	 .handler = handle_jtag_tap_enabler,
+	 .help = "Try to enable the specified TAP using the "
+		"'tap-enable' TAP event.",
+	 .usage = "tap_name",
 	 },
 	{
 	 .name = "tapdisable",
@@ -119,7 +127,8 @@ static const struct command_registration hl_transport_jtag_subcommand_handlers[]
 	{
 	 .name = "cget",
 	 .mode = COMMAND_EXEC,
-	 .jim_handler = jim_jtag_configure,
+	 .handler = handle_jtag_configure,
+	 .usage = "",
 	 },
 	{
 	 .name = "names",

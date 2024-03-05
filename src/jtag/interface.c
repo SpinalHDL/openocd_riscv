@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -11,19 +13,6 @@
  *                                                                         *
  *   Copyright (C) 2009 Zachary T Welch                                    *
  *   zw@superlucidity.net                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -383,7 +372,7 @@ tap_state_t tap_state_by_name(const char *name)
 	tap_state_name(a), tap_state_name(b), astr, bstr)
 
 tap_state_t jtag_debug_state_machine_(const void *tms_buf, const void *tdi_buf,
-	unsigned tap_bits, tap_state_t next_state)
+	unsigned int tap_bits, tap_state_t next_state)
 {
 	const uint8_t *tms_buffer;
 	const uint8_t *tdi_buffer;

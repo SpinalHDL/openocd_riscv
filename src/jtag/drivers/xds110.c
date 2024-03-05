@@ -1,18 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2017 by Texas Instruments, Inc.                         *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -590,9 +579,6 @@ static bool usb_get_response(uint32_t *total_bytes_read, uint32_t timeout)
 
 static bool usb_send_command(uint16_t size)
 {
-	int written;
-	bool success = true;
-
 	/* Check the packet length */
 	if (size > USB_PAYLOAD_SIZE)
 		return false;
@@ -607,13 +593,7 @@ static bool usb_send_command(uint16_t size)
 	size += 3;
 
 	/* Send the data via the USB connection */
-	success = usb_write(xds110.write_packet, (int)size, &written);
-
-	/* Check if the correct number of bytes was written */
-	if (written != (int)size)
-		success = false;
-
-	return success;
+	return usb_write(xds110.write_packet, (int)size, NULL);
 }
 
 /***************************************************************************
@@ -1311,7 +1291,7 @@ static int xds110_swd_run_queue(void)
 
 	/* Transfer results into caller's buffers */
 	for (result = 0; result < xds110.txn_result_count; result++)
-		if (xds110.txn_dap_results[result] != 0)
+		if (xds110.txn_dap_results[result])
 			*xds110.txn_dap_results[result] = dap_results[result];
 
 	xds110.txn_request_size = 0;
@@ -1365,11 +1345,13 @@ static void xds110_swd_queue_cmd(uint8_t cmd, uint32_t *value)
 static void xds110_swd_read_reg(uint8_t cmd, uint32_t *value,
 	uint32_t ap_delay_clk)
 {
+	assert(cmd & SWD_CMD_RNW);
 	xds110_swd_queue_cmd(cmd, value);
 }
 static void xds110_swd_write_reg(uint8_t cmd, uint32_t value,
 	uint32_t ap_delay_clk)
 {
+	assert(!(cmd & SWD_CMD_RNW));
 	xds110_swd_queue_cmd(cmd, &value);
 }
 
@@ -1620,7 +1602,7 @@ static void xds110_flush(void)
 			}
 			bits = 0;
 		}
-		if (xds110.txn_scan_results[result].buffer != 0)
+		if (xds110.txn_scan_results[result].buffer)
 			bit_copy(xds110.txn_scan_results[result].buffer, 0, data_pntr,
 				bits, xds110.txn_scan_results[result].num_bits);
 		bits += xds110.txn_scan_results[result].num_bits;
@@ -1696,8 +1678,8 @@ static void xds110_execute_pathmove(struct jtag_command *cmd)
 	if (num_states == 0)
 		return;
 
-	path = (uint8_t *)malloc(num_states * sizeof(uint8_t));
-	if (path == 0) {
+	path = malloc(num_states * sizeof(uint8_t));
+	if (!path) {
 		LOG_ERROR("XDS110: unable to allocate memory");
 		return;
 	}
@@ -1775,7 +1757,7 @@ static void xds110_queue_scan(struct jtag_command *cmd)
 	/* Clear data out buffer to default value of all zeros */
 	memset((void *)buffer, 0x00, total_bytes);
 	for (i = 0; i < cmd->cmd.scan->num_fields; i++) {
-		if (cmd->cmd.scan->fields[i].out_value != 0) {
+		if (cmd->cmd.scan->fields[i].out_value) {
 			/* Copy over data to scan out into request buffer */
 			bit_copy(buffer, offset, cmd->cmd.scan->fields[i].out_value, 0,
 				cmd->cmd.scan->fields[i].num_bits);
@@ -1858,9 +1840,9 @@ static void xds110_execute_command(struct jtag_command *cmd)
 	}
 }
 
-static int xds110_execute_queue(void)
+static int xds110_execute_queue(struct jtag_command *cmd_queue)
 {
-	struct jtag_command *cmd = jtag_command_queue;
+	struct jtag_command *cmd = cmd_queue;
 
 	while (cmd) {
 		xds110_execute_command(cmd);

@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2007 by Benedikt Sauter                                 *
  *   sauter@ixbat.de                                                       *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 /*
@@ -94,9 +83,9 @@ static void usbprog_jtag_write_slice(struct usbprog_jtag *usbprog_jtag, unsigned
 static void usbprog_jtag_set_bit(struct usbprog_jtag *usbprog_jtag, int bit, int value);
 /* static int usbprog_jtag_get_bit(struct usbprog_jtag *usbprog_jtag, int bit); */
 
-static int usbprog_execute_queue(void)
+static int usbprog_execute_queue(struct jtag_command *cmd_queue)
 {
-	struct jtag_command *cmd = jtag_command_queue;	/* currently processed command */
+	struct jtag_command *cmd = cmd_queue;	/* currently processed command */
 	int scan_size;
 	enum scan_type type;
 	uint8_t *buffer;
@@ -159,7 +148,7 @@ static int usbprog_init(void)
 	usbprog_jtag_handle = usbprog_jtag_open();
 
 	tms_chain_index = 0;
-	if (usbprog_jtag_handle == 0) {
+	if (!usbprog_jtag_handle) {
 		LOG_ERROR("Can't find USB JTAG Interface! Please check connection and permissions.");
 		return ERROR_JTAG_INIT_FAILED;
 	}
@@ -346,15 +335,13 @@ static void usbprog_reset(int trst, int srst)
 
 /*************** jtag lowlevel functions ********************/
 
-struct usb_bus *busses;
-
 struct usbprog_jtag *usbprog_jtag_open(void)
 {
 	const uint16_t vids[] = { VID, 0 };
 	const uint16_t pids[] = { PID, 0 };
 	struct libusb_device_handle *dev;
 
-	if (jtag_libusb_open(vids, pids, &dev, NULL) != ERROR_OK)
+	if (jtag_libusb_open(vids, pids, NULL, &dev, NULL) != ERROR_OK)
 		return NULL;
 
 	struct usbprog_jtag *tmp = malloc(sizeof(struct usbprog_jtag));

@@ -1,5 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0
- *
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
  * Copyright (c) 2019 Google, LLC.
  * Author: Moritz Fischer <moritzf@google.com>
  */
@@ -361,9 +362,9 @@ static int xlnx_pcie_xvc_execute_command(struct jtag_command *cmd)
 	return ERROR_OK;
 }
 
-static int xlnx_pcie_xvc_execute_queue(void)
+static int xlnx_pcie_xvc_execute_queue(struct jtag_command *cmd_queue)
 {
-	struct jtag_command *cmd = jtag_command_queue;
+	struct jtag_command *cmd = cmd_queue;
 	int ret;
 
 	while (cmd) {

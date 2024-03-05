@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2006 by Magnus Lundin                                   *
  *   lundin@mlu.mine.nu                                                    *
@@ -5,18 +7,7 @@
  *   Copyright (C) 2008 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
  *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
+ *   Copyright (C) 2019-2021, Ampere Computing LLC                         *
  ***************************************************************************/
 
 #ifndef OPENOCD_TARGET_ARM_ADI_V5_H
@@ -53,11 +44,15 @@
  */
 #define DP_DPIDR        BANK_REG(0x0, 0x0) /* DPv1+: ro */
 #define DP_ABORT        BANK_REG(0x0, 0x0) /* DPv1+: SWD: wo */
+#define DP_DPIDR1       BANK_REG(0x1, 0x0) /* DPv3: ro */
+#define DP_BASEPTR0     BANK_REG(0x2, 0x0) /* DPv3: ro */
+#define DP_BASEPTR1     BANK_REG(0x3, 0x0) /* DPv3: ro */
 #define DP_CTRL_STAT    BANK_REG(0x0, 0x4) /* DPv0+: rw */
 #define DP_DLCR         BANK_REG(0x1, 0x4) /* DPv1+: SWD: rw */
 #define DP_TARGETID     BANK_REG(0x2, 0x4) /* DPv2: ro */
 #define DP_DLPIDR       BANK_REG(0x3, 0x4) /* DPv2: ro */
 #define DP_EVENTSTAT    BANK_REG(0x4, 0x4) /* DPv2: ro */
+#define DP_SELECT1      BANK_REG(0x5, 0x4) /* DPv3: ro */
 #define DP_RESEND       BANK_REG(0x0, 0x8) /* DPv1+: SWD: ro */
 #define DP_SELECT       BANK_REG(0x0, 0x8) /* DPv0+: JTAG: rw; SWD: wo */
 #define DP_RDBUFF       BANK_REG(0x0, 0xC) /* DPv0+: ro */
@@ -75,6 +70,13 @@
 #define STKERRCLR       (1UL << 2) /* SWD-only */
 #define WDERRCLR        (1UL << 3) /* SWD-only */
 #define ORUNERRCLR      (1UL << 4) /* SWD-only */
+
+/* Fields of register DP_DPIDR1 */
+#define DP_DPIDR1_ASIZE_MASK    (0x7F)
+#define DP_DPIDR1_ERRMODE       BIT(7)
+
+/* Fields of register DP_BASEPTR0 */
+#define DP_BASEPTR0_VALID       BIT(0)
 
 /* Fields of the DP's CTRL/STAT register */
 #define CORUNDETECT     (1UL << 0)
@@ -95,41 +97,77 @@
 
 #define DP_DLPIDR_PROTVSN	1u
 
-#define DP_SELECT_APSEL 0xFF000000
-#define DP_SELECT_APBANK 0x000000F0
-#define DP_SELECT_DPBANK 0x0000000F
-#define DP_SELECT_INVALID 0x00FFFF00 /* Reserved bits one */
+#define ADIV5_DP_SELECT_APSEL	0xFF000000
+#define ADIV5_DP_SELECT_APBANK	0x000000F0
+#define DP_SELECT_DPBANK		0x0000000F
+/*
+ * Mask of AP ADDR in select cache, concatenating DP SELECT and DP_SELECT1.
+ * In case of ADIv5, the mask contains both APSEL and APBANKSEL fields.
+ */
+#define SELECT_AP_MASK			(~(uint64_t)DP_SELECT_DPBANK)
 
-#define DP_APSEL_MAX        (255)
-#define DP_APSEL_INVALID    (-1)
+#define DP_APSEL_MAX			(255) /* Strict limit for ADIv5, number of AP buffers for ADIv6 */
+#define DP_APSEL_INVALID		0xF00 /* more than DP_APSEL_MAX and not ADIv6 aligned 4k */
 
-#define DP_TARGETSEL_INVALID 0xFFFFFFFFU
-#define DP_TARGETSEL_DPID_MASK 0x0FFFFFFFU
+#define DP_TARGETSEL_INVALID	0xFFFFFFFFU
+#define DP_TARGETSEL_DPID_MASK	0x0FFFFFFFU
 #define DP_TARGETSEL_INSTANCEID_MASK 0xF0000000U
 #define DP_TARGETSEL_INSTANCEID_SHIFT 28
 
 
 /* MEM-AP register addresses */
-#define MEM_AP_REG_CSW		0x00
-#define MEM_AP_REG_TAR		0x04
-#define MEM_AP_REG_TAR64	0x08		/* RW: Large Physical Address Extension */
-#define MEM_AP_REG_DRW		0x0C		/* RW: Data Read/Write register */
-#define MEM_AP_REG_BD0		0x10		/* RW: Banked Data register 0-3 */
-#define MEM_AP_REG_BD1		0x14
-#define MEM_AP_REG_BD2		0x18
-#define MEM_AP_REG_BD3		0x1C
-#define MEM_AP_REG_MBT		0x20		/* --: Memory Barrier Transfer register */
-#define MEM_AP_REG_BASE64	0xF0		/* RO: Debug Base Address (LA) register */
-#define MEM_AP_REG_CFG		0xF4		/* RO: Configuration register */
-#define MEM_AP_REG_BASE		0xF8		/* RO: Debug Base Address register */
+#define ADIV5_MEM_AP_REG_CSW    (0x00)
+#define ADIV5_MEM_AP_REG_TAR    (0x04)
+#define ADIV5_MEM_AP_REG_TAR64  (0x08)		/* RW: Large Physical Address Extension */
+#define ADIV5_MEM_AP_REG_DRW    (0x0C)		/* RW: Data Read/Write register */
+#define ADIV5_MEM_AP_REG_BD0    (0x10)		/* RW: Banked Data register 0-3 */
+#define ADIV5_MEM_AP_REG_BD1    (0x14)
+#define ADIV5_MEM_AP_REG_BD2    (0x18)
+#define ADIV5_MEM_AP_REG_BD3    (0x1C)
+#define ADIV5_MEM_AP_REG_MBT    (0x20)		/* --: Memory Barrier Transfer register */
+#define ADIV5_MEM_AP_REG_BASE64 (0xF0)		/* RO: Debug Base Address (LA) register */
+#define ADIV5_MEM_AP_REG_CFG    (0xF4)		/* RO: Configuration register */
+#define ADIV5_MEM_AP_REG_BASE   (0xF8)		/* RO: Debug Base Address register */
+
+#define ADIV6_MEM_AP_REG_CSW    (0xD00 + ADIV5_MEM_AP_REG_CSW)
+#define ADIV6_MEM_AP_REG_TAR    (0xD00 + ADIV5_MEM_AP_REG_TAR)
+#define ADIV6_MEM_AP_REG_TAR64  (0xD00 + ADIV5_MEM_AP_REG_TAR64)
+#define ADIV6_MEM_AP_REG_DRW    (0xD00 + ADIV5_MEM_AP_REG_DRW)
+#define ADIV6_MEM_AP_REG_BD0    (0xD00 + ADIV5_MEM_AP_REG_BD0)
+#define ADIV6_MEM_AP_REG_BD1    (0xD00 + ADIV5_MEM_AP_REG_BD1)
+#define ADIV6_MEM_AP_REG_BD2    (0xD00 + ADIV5_MEM_AP_REG_BD2)
+#define ADIV6_MEM_AP_REG_BD3    (0xD00 + ADIV5_MEM_AP_REG_BD3)
+#define ADIV6_MEM_AP_REG_MBT    (0xD00 + ADIV5_MEM_AP_REG_MBT)
+#define ADIV6_MEM_AP_REG_BASE64 (0xD00 + ADIV5_MEM_AP_REG_BASE64)
+#define ADIV6_MEM_AP_REG_CFG    (0xD00 + ADIV5_MEM_AP_REG_CFG)
+#define ADIV6_MEM_AP_REG_BASE   (0xD00 + ADIV5_MEM_AP_REG_BASE)
+
+#define MEM_AP_REG_CSW(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_CSW    : ADIV5_MEM_AP_REG_CSW)
+#define MEM_AP_REG_TAR(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_TAR    : ADIV5_MEM_AP_REG_TAR)
+#define MEM_AP_REG_TAR64(dap)   (is_adiv6(dap) ? ADIV6_MEM_AP_REG_TAR64  : ADIV5_MEM_AP_REG_TAR64)
+#define MEM_AP_REG_DRW(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_DRW    : ADIV5_MEM_AP_REG_DRW)
+#define MEM_AP_REG_BD0(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_BD0    : ADIV5_MEM_AP_REG_BD0)
+#define MEM_AP_REG_BD1(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_BD1    : ADIV5_MEM_AP_REG_BD1)
+#define MEM_AP_REG_BD2(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_BD2    : ADIV5_MEM_AP_REG_BD2)
+#define MEM_AP_REG_BD3(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_BD3    : ADIV5_MEM_AP_REG_BD3)
+#define MEM_AP_REG_MBT(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_MBT    : ADIV5_MEM_AP_REG_MBT)
+#define MEM_AP_REG_BASE64(dap)  (is_adiv6(dap) ? ADIV6_MEM_AP_REG_BASE64 : ADIV5_MEM_AP_REG_BASE64)
+#define MEM_AP_REG_CFG(dap)     (is_adiv6(dap) ? ADIV6_MEM_AP_REG_CFG    : ADIV5_MEM_AP_REG_CFG)
+#define MEM_AP_REG_BASE(dap)    (is_adiv6(dap) ? ADIV6_MEM_AP_REG_BASE   : ADIV5_MEM_AP_REG_BASE)
+
 /* Generic AP register address */
-#define AP_REG_IDR			0xFC		/* RO: Identification Register */
+#define ADIV5_AP_REG_IDR        (0xFC)		/* RO: Identification Register */
+#define ADIV6_AP_REG_IDR        (0xD00 + ADIV5_AP_REG_IDR)
+#define AP_REG_IDR(dap)         (is_adiv6(dap) ? ADIV6_AP_REG_IDR : ADIV5_AP_REG_IDR)
 
 /* Fields of the MEM-AP's CSW register */
 #define CSW_SIZE_MASK		7
 #define CSW_8BIT		0
 #define CSW_16BIT		1
 #define CSW_32BIT		2
+#define CSW_64BIT		3
+#define CSW_128BIT		4
+#define CSW_256BIT		5
 #define CSW_ADDRINC_MASK    (3UL << 4)
 #define CSW_ADDRINC_OFF     0UL
 #define CSW_ADDRINC_SINGLE  (1UL << 4)
@@ -216,9 +254,11 @@ struct adiv5_ap {
 	struct adiv5_dap *dap;
 
 	/**
-	 * Number of this AP.
+	 * ADIv5: Number of this AP (0~255)
+	 * ADIv6: Base address of this AP (4k aligned)
+	 * TODO: to be more coherent, it should be renamed apsel
 	 */
-	uint8_t ap_num;
+	uint64_t ap_num;
 
 	/**
 	 * Default value for (MEM-AP) AP_REG_CSW register.
@@ -231,6 +271,26 @@ struct adiv5_ap {
 	 * word access.  "-1" indicates no cached value.
 	 */
 	uint32_t csw_value;
+
+	/**
+	 * Save the supported CSW.Size data types for the MEM-AP.
+	 * Each bit corresponds to a data type.
+	 * 0b1 = Supported data size. 0b0 = Not supported.
+	 * Bit 0 = Byte (8-bits)
+	 * Bit 1 = Halfword (16-bits)
+	 * Bit 2 = Word (32-bits) - always supported by spec.
+	 * Bit 3 = Doubleword (64-bits)
+	 * Bit 4 = 128-bits
+	 * Bit 5 = 256-bits
+	 */
+	uint32_t csw_size_supported_mask;
+	/**
+	 * Probed CSW.Size data types for the MEM-AP.
+	 * Each bit corresponds to a data type.
+	 * 0b1 = Data size has been probed. 0b0 = Not yet probed.
+	 * Bits assigned to sizes same way as above.
+	 */
+	uint32_t csw_size_probed_mask;
 
 	/**
 	 * Cache for (MEM-AP) AP_REG_TAR register value This is written to
@@ -249,7 +309,8 @@ struct adiv5_ap {
 	uint32_t tar_autoincr_block;
 
 	/* true if packed transfers are supported by the MEM-AP */
-	bool packed_transfers;
+	bool packed_transfers_supported;
+	bool packed_transfers_probed;
 
 	/* true if unaligned memory access is not supported by the MEM-AP */
 	bool unaligned_access_bad;
@@ -259,6 +320,12 @@ struct adiv5_ap {
 
 	/* MEM AP configuration register indicating LPAE support */
 	uint32_t cfg_reg;
+
+	/* references counter */
+	unsigned int refcount;
+
+	/* AP referenced during config. Never put it, even when refcount reaches zero */
+	bool config_ap_never_release;
 };
 
 
@@ -297,13 +364,23 @@ struct adiv5_dap {
 	struct adiv5_ap ap[DP_APSEL_MAX + 1];
 
 	/* The current manually selected AP by the "dap apsel" command */
-	uint32_t apsel;
+	uint64_t apsel;
 
+	/** Cache for DP SELECT and SELECT1 (ADIv6) register. */
+	uint64_t select;
+	/** Validity of DP SELECT cache. false will force register rewrite */
+	bool select_valid;
+	bool select1_valid;	/* ADIv6 only */
 	/**
-	 * Cache for DP_SELECT register. A value of DP_SELECT_INVALID
-	 * indicates no cached value and forces rewrite of the register.
+	 * Partial DPBANKSEL validity for SWD only.
+	 * ADIv6 line reset sets DP SELECT DPBANKSEL to zero,
+	 * ADIv5 does not.
+	 * We can rely on it for the banked DP register 0 also on ADIv5
+	 * as ADIv5 has no mapping for DP reg 0 - it is always DPIDR.
+	 * It is important to avoid setting DP SELECT in connection
+	 * reset state before reading DPIDR.
 	 */
-	uint32_t select;
+	bool select_dpbanksel_valid;
 
 	/* information about current pending SWjDP-AHBAP transaction */
 	uint8_t  ack;
@@ -319,6 +396,10 @@ struct adiv5_dap {
 	 * the AHB-AP has strange byte ordering these processors, and we need to
 	 * swizzle appropriately. */
 	bool ti_be_32_quirks;
+
+	/* The Nuvoton NPCX M4 has an issue with writing to non-4-byte-aligned mmios.
+	 * The work around is to repeat the data in all 4 bytes of DRW */
+	bool nu_npcx_quirks;
 
 	/**
 	 * STLINK adapter need to know if last AP operation was read or write, and
@@ -347,6 +428,12 @@ struct adiv5_dap {
 	 * Record if enter in SWD required passing through DORMANT
 	 */
 	bool switch_through_dormant;
+
+	/** Indicates ADI version (5, 6 or 0 for unknown) being used */
+	unsigned int adi_version;
+
+	/* ADIv6 only field indicating ROM Table address size */
+	unsigned int asize;
 };
 
 /**
@@ -357,6 +444,9 @@ struct adiv5_dap {
  * available until run().
  */
 struct dap_ops {
+	/** Optional; called once on the first enabled dap before connecting */
+	int (*pre_connect_init)(struct adiv5_dap *dap);
+
 	/** connect operation for SWD */
 	int (*connect)(struct adiv5_dap *dap);
 
@@ -406,6 +496,9 @@ enum ap_type {
 	AP_TYPE_AHB5H_AP = AP_REG_IDR_VALUE(ARM_ID, AP_REG_IDR_CLASS_MEM_AP, 8),  /* AHB5 with enhanced HPROT Memory-AP */
 };
 
+extern const struct dap_ops jtag_dp_ops;
+extern const struct dap_ops swd_dap_ops;
+
 /* Check the ap->cfg_reg Long Address field (bit 1)
  *
  * 0b0: The AP only supports physical addresses 32 bits or smaller
@@ -418,6 +511,18 @@ enum ap_type {
 static inline bool is_64bit_ap(struct adiv5_ap *ap)
 {
 	return (ap->cfg_reg & MEM_AP_REG_CFG_LA) != 0;
+}
+
+/**
+ * Check if DAP is ADIv6
+ *
+ * @param dap The DAP to test
+ *
+ * @return true for ADIv6, false for either ADIv5 or unknown version
+ */
+static inline bool is_adiv6(const struct adiv5_dap *dap)
+{
+	return dap->adi_version == 6;
 }
 
 /**
@@ -486,6 +591,10 @@ static inline int dap_queue_ap_read(struct adiv5_ap *ap,
 		unsigned reg, uint32_t *data)
 {
 	assert(ap->dap->ops);
+	if (ap->refcount == 0) {
+		ap->refcount = 1;
+		LOG_ERROR("BUG: refcount AP#0x%" PRIx64 " used without get", ap->ap_num);
+	}
 	return ap->dap->ops->queue_ap_read(ap, reg, data);
 }
 
@@ -502,6 +611,10 @@ static inline int dap_queue_ap_write(struct adiv5_ap *ap,
 		unsigned reg, uint32_t data)
 {
 	assert(ap->dap->ops);
+	if (ap->refcount == 0) {
+		ap->refcount = 1;
+		LOG_ERROR("BUG: refcount AP#0x%" PRIx64 " used without get", ap->ap_num);
+	}
 	return ap->dap->ops->queue_ap_write(ap, reg, data);
 }
 
@@ -619,19 +732,25 @@ int mem_ap_init(struct adiv5_ap *ap);
 /* Invalidate cached DP select and cached TAR and CSW of all APs */
 void dap_invalidate_cache(struct adiv5_dap *dap);
 
-/* Probe the AP for ROM Table location */
-int dap_get_debugbase(struct adiv5_ap *ap,
-			target_addr_t *dbgbase, uint32_t *apid);
+/* read ADIv6 baseptr register */
+int adiv6_dap_read_baseptr(struct command_invocation *cmd, struct adiv5_dap *dap, target_addr_t *baseptr);
 
-/* Probe Access Ports to find a particular type */
-int dap_find_ap(struct adiv5_dap *dap,
+/* test if ap_num is valid, based on current knowledge of dap */
+bool is_ap_num_valid(struct adiv5_dap *dap, uint64_t ap_num);
+
+/* Probe Access Ports to find a particular type. Increment AP refcount */
+int dap_find_get_ap(struct adiv5_dap *dap,
 			enum ap_type type_to_find,
 			struct adiv5_ap **ap_out);
 
-static inline struct adiv5_ap *dap_ap(struct adiv5_dap *dap, uint8_t ap_num)
-{
-	return &dap->ap[ap_num];
-}
+/* Return AP with specified ap_num. Increment AP refcount */
+struct adiv5_ap *dap_get_ap(struct adiv5_dap *dap, uint64_t ap_num);
+
+/* Return AP with specified ap_num. Increment AP refcount and keep it non-zero */
+struct adiv5_ap *dap_get_config_ap(struct adiv5_dap *dap, uint64_t ap_num);
+
+/* Decrement AP refcount and release the AP when refcount reaches zero */
+int dap_put_ap(struct adiv5_ap *ap);
 
 /** Check if SWD multidrop configuration is valid */
 static inline bool dap_is_multidrop(struct adiv5_dap *dap)
@@ -641,7 +760,7 @@ static inline bool dap_is_multidrop(struct adiv5_dap *dap)
 
 /* Lookup CoreSight component */
 int dap_lookup_cs_component(struct adiv5_ap *ap,
-			target_addr_t dbgbase, uint8_t type, target_addr_t *addr, int32_t *idx);
+			uint8_t type, target_addr_t *addr, int32_t idx);
 
 struct target;
 
@@ -664,7 +783,7 @@ extern const struct swd_driver *adiv5_dap_swd_driver(struct adiv5_dap *self);
 extern int dap_cleanup_all(void);
 
 struct adiv5_private_config {
-	int ap_num;
+	uint64_t ap_num;
 	struct adiv5_dap *dap;
 };
 
@@ -673,7 +792,7 @@ extern int adiv5_jim_configure(struct target *target, struct jim_getopt_info *go
 
 struct adiv5_mem_ap_spot {
 	struct adiv5_dap *dap;
-	int ap_num;
+	uint64_t ap_num;
 	uint32_t base;
 };
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: CC0-1.0
+
 /*
  * Since at least FreeRTOS V7.5.3 uxTopUsedPriority is no longer
  * present in the kernel, so it has to be supplied by other means for

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2011 by Julius Baxter                                   *
  *   julius@opencores.org                                                  *
@@ -8,19 +10,6 @@
  *   Copyright (C) 2013 by Franck Jullien                                  *
  *   elec4fun@gmail.com                                                    *
  *                                                                         *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -800,7 +789,7 @@ static int or1k_resume_or_step(struct target *target, int current,
 		  address, step ? "yes" : "no", handle_breakpoints ? "yes" : "no");
 
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1037,7 +1026,7 @@ static int or1k_read_memory(struct target *target, target_addr_t address,
 	LOG_DEBUG("Read memory at 0x%08" TARGET_PRIxADDR ", size: %" PRIu32 ", count: 0x%08" PRIx32, address, size, count);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1064,7 +1053,7 @@ static int or1k_write_memory(struct target *target, target_addr_t address,
 	LOG_DEBUG("Write memory at 0x%08" TARGET_PRIxADDR ", size: %" PRIu32 ", count: 0x%08" PRIx32, address, size, count);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("Target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 

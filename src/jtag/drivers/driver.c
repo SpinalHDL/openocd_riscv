@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -11,19 +13,6 @@
  *                                                                         *
  *   Copyright (C) 2009 Zachary T Welch                                    *
  *   zw@superlucidity.net                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -87,16 +76,22 @@ int interface_jtag_add_ir_scan(struct jtag_tap *active,
 
 		if (tap == active) {
 			/* if TAP is listed in input fields, copy the value */
-			tap->bypass = 0;
+			tap->bypass = false;
 
 			jtag_scan_field_clone(field, in_fields);
 		} else {
 			/* if a TAP isn't listed in input fields, set it to BYPASS */
 
-			tap->bypass = 1;
+			tap->bypass = true;
 
 			field->num_bits = tap->ir_length;
-			field->out_value = buf_set_ones(cmd_queue_alloc(DIV_ROUND_UP(tap->ir_length, 8)), tap->ir_length);
+			if (tap->ir_bypass_value) {
+				uint8_t *v = cmd_queue_alloc(DIV_ROUND_UP(tap->ir_length, 8));
+				buf_set_u64(v, 0, tap->ir_length, tap->ir_bypass_value);
+				field->out_value = v;
+			} else {
+				field->out_value = buf_set_ones(cmd_queue_alloc(DIV_ROUND_UP(tap->ir_length, 8)), tap->ir_length);
+			}
 			field->in_value = NULL; /* do not collect input for tap's in bypass */
 		}
 

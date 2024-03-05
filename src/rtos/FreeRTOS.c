@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2011 by Broadcom Corporation                            *
  *   Evan Hunter - ehunter@broadcom.com                                    *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -33,6 +22,7 @@
 
 #define FREERTOS_MAX_PRIORITIES	63
 #define FREERTOS_THREAD_NAME_STR_SIZE 200
+#define FREERTOS_CURRENT_EXECUTION_ID 1
 
 struct freertos_params {
 	const char *target_name;
@@ -59,6 +49,8 @@ struct FreeRTOS {
 	unsigned ubasetype_size;
 	/* sizeof(void *) */
 	unsigned pointer_size;
+	/* sizeof(TickType_t) */
+	unsigned ticktype_size;
 	unsigned list_width;
 	unsigned list_item_width;
 	unsigned list_elem_next_offset;
@@ -81,7 +73,8 @@ static int cortex_m_stacking(struct rtos *rtos, const struct rtos_register_stack
 	int cm4_fpu_enabled = 0;
 	struct armv7m_common *armv7m_target = target_to_armv7m(rtos->target);
 	if (is_armv7m(armv7m_target)) {
-		if (armv7m_target->fp_feature == FPV4_SP) {
+		if ((armv7m_target->fp_feature == FPV4_SP) || (armv7m_target->fp_feature == FPV5_SP) ||
+				(armv7m_target->fp_feature == FPV5_DP)) {
 			/* Found ARM v7m target which includes a FPU */
 			uint32_t cpacr;
 
@@ -120,12 +113,44 @@ static int cortex_m_stacking(struct rtos *rtos, const struct rtos_register_stack
 	return ERROR_OK;
 }
 
-static int nds32_stacking(struct rtos *rtos, const struct rtos_register_stacking **stacking,
-							 target_addr_t stack_ptr)
+/* take 4 bytes (32 bits) as the default size,
+ * which is suitable for most 32-bit targets and
+ * configuration of configUSE_16_BIT_TICKS = 0. */
+static unsigned int freertos_ticktype_size = 4;
+COMMAND_HANDLER(handle_freertos_ticktype_size)
 {
-	*stacking = &rtos_standard_nds32_n1068_stacking;
+	if (CMD_ARGC != 1) {
+		LOG_ERROR("Command takes exactly 1 parameter");
+		return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+
+	unsigned int size;
+	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[0], size);
+	switch (size) {
+		case 2:
+		case 4:
+		case 8:
+			freertos_ticktype_size = size;
+			break;
+		default:
+			LOG_ERROR("Invalid ticktype size. Should be 2, 4 or 8.");
+			return ERROR_COMMAND_SYNTAX_ERROR;
+	}
+
 	return ERROR_OK;
 }
+
+static const struct command_registration freertos_commands[] = {
+	{
+		.name = "freertos_ticktype_size",
+		.handler = handle_freertos_ticktype_size,
+		.mode = COMMAND_ANY,
+		.usage = "(2|4|8)",
+		.help = "Pass the size (in bytes) of TickType_t to OpenOCD. To make sure the "
+		"calculation of offsets and sizes is correct. Defaults to 4."
+	},
+	COMMAND_REGISTRATION_DONE
+};
 
 static enum {
 	STACKING_MAINLINE,
@@ -195,10 +220,6 @@ static const struct freertos_params freertos_params_list[] = {
 	.stacking = cortex_m_stacking
 	},
 	{
-	.target_name = "nds32_v3",
-	.stacking = nds32_stacking,
-	},
-	{
 	.target_name = "riscv",
 	.stacking = riscv_stacking,
 	.commands = riscv_commands,
@@ -215,7 +236,7 @@ static int freertos_get_thread_reg_value(struct rtos *rtos, threadid_t thread_id
 static int freertos_set_reg(struct rtos *rtos, uint32_t reg_num, uint8_t *reg_value);
 static int freertos_get_symbol_list_to_lookup(struct symbol_table_elem *symbol_list[]);
 
-struct rtos_type freertos_rtos = {
+const struct rtos_type freertos_rtos = {
 	.name = "FreeRTOS",
 
 	.detect_rtos = freertos_detect_rtos,
@@ -239,6 +260,7 @@ enum freertos_symbol_values {
 	FREERTOS_VAL_X_SUSPENDED_TASK_LIST = 8,
 	FREERTOS_VAL_UX_CURRENT_NUMBER_OF_TASKS = 9,
 	FREERTOS_VAL_UX_TOP_USED_PRIORITY = 10,
+	FREERTOS_VAL_X_SCHEDULER_RUNNING = 11,
 };
 
 struct symbols {
@@ -258,6 +280,7 @@ static const struct symbols freertos_symbol_list[] = {
 	{ "xSuspendedTaskList", true }, /* Only if INCLUDE_vTaskSuspend */
 	{ "uxCurrentNumberOfTasks", false },
 	{ "uxTopUsedPriority", true }, /* Unavailable since v7.5.3 */
+	{ "xSchedulerRunning", false },
 	{ NULL, false }
 };
 
@@ -305,13 +328,12 @@ static unsigned populate_offset_size(struct FreeRTOS *freertos,
 				align = freertos->pointer_size;
 				break;
 			case TYPE_TICKTYPE:
-				/* Could be either 16 or 32 bits, depending on configUSE_16_BIT_TICKS. */
-				info[i].size = 4;
-				align = 4;
+				info[i].size = freertos->ticktype_size;
+				align = freertos->ticktype_size;
 				break;
 			case TYPE_LIST_ITEM:
 				info[i].size = freertos->list_item_width;
-				align = MAX(freertos->ubasetype_size, freertos->pointer_size);
+				align = MAX(freertos->ticktype_size, freertos->pointer_size);
 				break;
 			case TYPE_CHAR_ARRAY:
 				/* size is set by the caller. */
@@ -347,11 +369,12 @@ static void freertos_compute_offsets(struct rtos *rtos)
 {
 	struct FreeRTOS *freertos = (struct FreeRTOS *) rtos->rtos_specific_params;
 
-	if (freertos->pointer_size != 0)
+	if (freertos->ticktype_size == freertos_ticktype_size)
 		return;
 
 	freertos->pointer_size = DIV_ROUND_UP(target_address_bits(rtos->target), 8);
 	freertos->ubasetype_size = DIV_ROUND_UP(target_data_bits(rtos->target), 8);
+	freertos->ticktype_size = freertos_ticktype_size;
 
 	/*
 	 * FreeRTOS can be compiled with configUSE_LIST_DATA_INTEGRITY_CHECK_BYTES
@@ -474,21 +497,36 @@ static int freertos_update_threads(struct rtos *rtos)
 	rtos_free_threadlist(rtos);
 
 	/* read the current thread */
-	target_addr_t pxCurrentTCB;
+	target_addr_t px_current_tcb;
 	retval = freertos_read_struct_value(rtos->target,
 										rtos->symbols[FREERTOS_VAL_PX_CURRENT_TCB].address,
 										0,
 										freertos->pointer_size,
-										&pxCurrentTCB);
+										&px_current_tcb);
 	if (retval != ERROR_OK) {
 		LOG_ERROR("Error reading current thread in FreeRTOS thread list");
 		return retval;
 	}
 	LOG_DEBUG("FreeRTOS: Read pxCurrentTCB at 0x%" PRIx64 ", value 0x%" PRIx64,
 										rtos->symbols[FREERTOS_VAL_PX_CURRENT_TCB].address,
-										pxCurrentTCB);
+										px_current_tcb);
 
-	if ((thread_list_size == 0) || (pxCurrentTCB == 0)) {
+	/* read scheduler running */
+	uint64_t scheduler_running;
+	retval = freertos_read_struct_value(rtos->target,
+						rtos->symbols[FREERTOS_VAL_X_SCHEDULER_RUNNING].address,
+						0,
+						freertos->ubasetype_size,
+						&scheduler_running);
+	if (retval != ERROR_OK) {
+		LOG_ERROR("Error reading FreeRTOS scheduler state");
+		return retval;
+	}
+	LOG_DEBUG("FreeRTOS: Read xSchedulerRunning at 0x%" PRIx64 ", value 0x%" PRIx64,
+										rtos->symbols[FREERTOS_VAL_X_SCHEDULER_RUNNING].address,
+										scheduler_running);
+
+	if (thread_list_size  == 0 || px_current_tcb == 0 || scheduler_running != 1) {
 		/* Either : No RTOS threads - there is always at least the current execution though */
 		/* OR     : No current thread - all threads suspended - show the current execution
 		 * of idling */
@@ -501,7 +539,8 @@ static int freertos_update_threads(struct rtos *rtos)
 			LOG_ERROR("Error allocating memory for %" PRIu64 " threads", thread_list_size);
 			return ERROR_FAIL;
 		}
-		rtos->thread_details->threadid = 1;
+		rtos->current_thread = FREERTOS_CURRENT_EXECUTION_ID;
+		rtos->thread_details->threadid = rtos->current_thread;
 		rtos->thread_details->exists = true;
 		rtos->thread_details->extra_info_str = NULL;
 		rtos->thread_details->thread_name_str = malloc(sizeof(tmp_str));
@@ -572,7 +611,6 @@ static int freertos_update_threads(struct rtos *rtos)
 	list_of_lists[num_lists++] = rtos->symbols[FREERTOS_VAL_X_SUSPENDED_TASK_LIST].address;
 	list_of_lists[num_lists++] = rtos->symbols[FREERTOS_VAL_X_TASKS_WAITING_TERMINATION].address;
 
-	rtos->current_thread = 0;
 	for (unsigned int i = 0; i < num_lists; i++) {
 		if (list_of_lists[i] == 0)
 			continue;
@@ -590,7 +628,7 @@ static int freertos_update_threads(struct rtos *rtos)
 			return retval;
 		}
 		LOG_DEBUG("FreeRTOS: Read thread count for list %u at 0x%" PRIx64 ", value %" PRIu64,
-										i, list_of_lists[i], list_thread_count);
+								i, list_of_lists[i] + freertos->list_uxNumberOfItems_offset, list_thread_count);
 
 		if (list_thread_count == 0)
 			continue;
@@ -634,8 +672,12 @@ static int freertos_update_threads(struct rtos *rtos)
 			if (!value) {
 				struct freertos_thread_entry *new_value = calloc(1, sizeof(struct freertos_thread_entry));
 				new_value->tcb = tcb;
-				/* threadid can't be 0. */
-				new_value->threadid = ++freertos->last_threadid;
+				/* threadid can't be 0.
+				 * plus 1 to avoid duplication with "Current Execution" */
+				new_value->threadid = ++freertos->last_threadid + FREERTOS_CURRENT_EXECUTION_ID;
+
+				LOG_DEBUG("FreeRTOS: new thread created, tcb=0x%" PRIx64 ", threadid=0x%" PRIx64,
+						new_value->tcb, new_value->threadid);
 
 				list_add_tail(&new_value->list, &freertos->thread_entry_list);
 				value = new_value;
@@ -675,7 +717,7 @@ static int freertos_update_threads(struct rtos *rtos)
 			strcpy(rtos->thread_details[tasks_found].thread_name_str, tmp_str);
 			rtos->thread_details[tasks_found].exists = true;
 
-			if (value->tcb == pxCurrentTCB) {
+			if (value->tcb == px_current_tcb && rtos->current_thread != FREERTOS_CURRENT_EXECUTION_ID) {
 				char running_str[] = "State: Running";
 				rtos->current_thread = value->threadid;
 				rtos->thread_details[tasks_found].extra_info_str = malloc(
@@ -687,6 +729,7 @@ static int freertos_update_threads(struct rtos *rtos)
 
 			tasks_found++;
 			list_thread_count--;
+			rtos->thread_count = tasks_found;
 
 			prev_list_elem_ptr = list_elem_ptr;
 			list_elem_ptr = 0;
@@ -708,7 +751,6 @@ static int freertos_update_threads(struct rtos *rtos)
 	}
 
 	free(list_of_lists);
-	rtos->thread_count = tasks_found;
 	return 0;
 }
 
@@ -914,5 +956,5 @@ static int freertos_create(struct target *target)
 			return ERROR_FAIL;
 	}
 
-	return ERROR_OK;
+	return register_commands(target->rtos->cmd_ctx, NULL, freertos_commands);
 }

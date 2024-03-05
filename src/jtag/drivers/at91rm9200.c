@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2006 by Anders Larsen                                   *
  *   al@alarsen.net                                                        *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -118,7 +107,7 @@ static int at91rm9200_quit(void);
 static struct bitbang_interface at91rm9200_bitbang = {
 	.read = at91rm9200_read,
 	.write = at91rm9200_write,
-	.blink = 0
+	.blink = NULL,
 };
 
 static bb_value_t at91rm9200_read(void)
@@ -168,8 +157,12 @@ COMMAND_HANDLER(at91rm9200_handle_device_command)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	/* only if the device name wasn't overwritten by cmdline */
-	if (at91rm9200_device == 0) {
+	if (!at91rm9200_device) {
 		at91rm9200_device = malloc(strlen(CMD_ARGV[0]) + sizeof(char));
+		if (!at91rm9200_device) {
+			LOG_ERROR("Out of memory");
+			return ERROR_FAIL;
+		}
 		strcpy(at91rm9200_device, CMD_ARGV[0]);
 	}
 

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 # not a GNU package. You can remove this line, if
 # have all needed files, that a GNU package needs
 AUTOMAKE_OPTIONS = gnu 1.6
@@ -24,10 +26,14 @@ noinst_LTLIBRARIES =
 info_TEXINFOS =
 dist_man_MANS =
 EXTRA_DIST =
+DISTCLEANFILES =
 
 if INTERNAL_JIMTCL
 SUBDIRS += jimtcl
 DIST_SUBDIRS += jimtcl
+EXTRA_DIST += jimtcl/configure.gnu
+# jimtcl from 0.79 to 0.82 miss cleaning jsmn.o
+DISTCLEANFILES += jimtcl/jsmn/jsmn.o
 endif
 
 # common flags used in openocd build
@@ -54,13 +60,19 @@ EXTRA_DIST += \
 	$(EXTRA_DIST_NEWS) \
 	Doxyfile.in \
 	LICENSES/license-rules.txt \
+	LICENSES/exceptions/eCos-exception-2.0 \
 	LICENSES/preferred/BSD-1-Clause \
 	LICENSES/preferred/BSD-2-Clause \
+	LICENSES/preferred/BSD-2-Clause-Views \
 	LICENSES/preferred/BSD-3-Clause \
+	LICENSES/preferred/BSD-Source-Code \
+	LICENSES/preferred/CC0-1.0 \
 	LICENSES/preferred/GFDL-1.2 \
 	LICENSES/preferred/gfdl-1.2.texi.readme \
 	LICENSES/preferred/GPL-2.0 \
+	LICENSES/preferred/LGPL-2.1 \
 	LICENSES/preferred/MIT \
+	LICENSES/stand-alone/Apache-2.0 \
 	LICENSES/stand-alone/GPL-3.0 \
 	tools/logger.pl \
 	tools/rlink_make_speed_table \
@@ -126,18 +138,9 @@ uninstall-hook:
 
 distclean-local:
 	rm -rf Doxyfile doxygen
-	rm -f $(srcdir)/jimtcl/configure.gnu
+	-rm -f $(srcdir)/jimtcl/configure.gnu
 
-# We want every change to have Signed-off-by. This is tricky to enforce in
-# Travis, because it automatically makes temporary commits when merging. So
-# instead we have a hook that enforces this in each workspace. To make sure
-# that users actually use those hooks, we point git at them here.
-# If git fails for some reason, that's OK. It's probably because somebody is
-# building the source completely outside a git repo.
-all-local:
-	cd $(srcdir) && git config core.hooksPath ./git-hooks || true
-
-DISTCLEANFILES = doxygen.log
+DISTCLEANFILES += doxygen.log
 
 METASOURCES = AUTO
 

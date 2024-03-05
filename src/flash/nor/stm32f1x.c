@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2011 by Andreas Fritiofson                              *
  *   andreas.fritiofson@gmail.com                                          *
- *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -484,7 +473,7 @@ static int stm32x_write_block_async(struct flash_bank *bank, const uint8_t *buff
 
 	/* memory buffer */
 	buffer_size = target_get_working_area_avail(target);
-	buffer_size = MIN(hwords_count * 2, MAX(buffer_size, 256));
+	buffer_size = MIN(hwords_count * 2 + 8, MAX(buffer_size, 256));
 	/* Normally we allocate all available working area.
 	 * MIN shrinks buffer_size if the size of the written block is smaller.
 	 * MAX prevents using async algo if the available working area is smaller
@@ -754,8 +743,9 @@ static int stm32x_get_property_addr(struct target *target, struct stm32x_propert
 		return ERROR_TARGET_NOT_EXAMINED;
 	}
 
-	switch (cortex_m_get_partno_safe(target)) {
+	switch (cortex_m_get_impl_part(target)) {
 	case CORTEX_M0_PARTNO: /* STM32F0x devices */
+	case CORTEX_M0P_PARTNO: /* APM32F0x devices */
 		addr->device_id = 0x40015800;
 		addr->flash_size = 0x1FFFF7CC;
 		return ERROR_OK;
@@ -1017,7 +1007,7 @@ static int stm32x_probe(struct flash_bank *bank)
 		flash_size_in_kb = stm32x_info->user_bank_size / 1024;
 	}
 
-	LOG_INFO("flash size = %dkbytes", flash_size_in_kb);
+	LOG_INFO("flash size = %d KiB", flash_size_in_kb);
 
 	/* did we assign flash size? */
 	assert(flash_size_in_kb != 0xffff);
@@ -1740,58 +1730,6 @@ const struct flash_driver stm32f1x_flash = {
 	.name = "stm32f1x",
 	.commands = stm32f1x_command_handlers,
 	.flash_bank_command = stm32x_flash_bank_command,
-	.erase = stm32x_erase,
-	.protect = stm32x_protect,
-	.write = stm32x_write,
-	.read = default_flash_read,
-	.probe = stm32x_probe,
-	.auto_probe = stm32x_auto_probe,
-	.erase_check = default_flash_blank_check,
-	.protect_check = stm32x_protect_check,
-	.info = get_stm32x_info,
-	.free_driver_priv = default_flash_free_driver_priv,
-};
-
-/* flash bank gd32vf103 <base> <size> 0 0 <target#>
- */
-FLASH_BANK_COMMAND_HANDLER(gd32vf103_flash_bank_command)
-{
-	struct stm32x_flash_bank *stm32x_info;
-
-	LOG_WARNING("DEPRECATED: The gd32vf103 flash target will be removed in June of 2023, please use stm32f1x instead.");
-	/* The reset code are just copy from stm32x_flash_bank_command function */
-	if (CMD_ARGC < 6)
-		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	stm32x_info = malloc(sizeof(struct stm32x_flash_bank));
-
-	bank->driver_priv = stm32x_info;
-	stm32x_info->probed = false;
-	stm32x_info->has_dual_banks = false;
-	stm32x_info->can_load_options = false;
-	stm32x_info->register_base = FLASH_REG_BASE_B0;
-	stm32x_info->user_bank_size = bank->size;
-
-	/* The flash write must be aligned to a halfword boundary */
-	bank->write_start_alignment = bank->write_end_alignment = 2;
-	return ERROR_OK;
-}
-
-static const struct command_registration gd32vf103_command_handlers[] = {
-	{
-		.name = "gd32vf103",
-		.mode = COMMAND_ANY,
-		.help = "gd32vf103 flash command group (identical to flash commands from stm32f1x)",
-		.usage = "",
-		.chain = stm32f1x_exec_command_handlers,
-	},
-	COMMAND_REGISTRATION_DONE
-};
-
-const struct flash_driver gd32vf103_flash = {
-	.name = "gd32vf103",
-	.commands = gd32vf103_command_handlers,
-	.flash_bank_command = gd32vf103_flash_bank_command,
 	.erase = stm32x_erase,
 	.protect = stm32x_protect,
 	.write = stm32x_write,

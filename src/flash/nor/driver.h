@@ -1,22 +1,11 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath <Dominic.Rath@gmx.de>              *
  *   Copyright (C) 2007,2008 Øyvind Harboe <oyvind.harboe@zylin.com>       *
  *   Copyright (C) 2008 by Spencer Oliver <spen@spen-soft.co.uk>           *
  *   Copyright (C) 2009 Zachary T Welch <zw@superlucidity.net>             *
  *   Copyright (C) 2010 by Antonio Borneo <borneo.antonio@gmail.com>       *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_FLASH_NOR_DRIVER_H
@@ -247,5 +236,78 @@ struct flash_driver {
  * @returns The flash_driver called @c name, or NULL if not found.
  */
 const struct flash_driver *flash_driver_find_by_name(const char *name);
+
+extern const struct flash_driver aduc702x_flash;
+extern const struct flash_driver aducm360_flash;
+extern const struct flash_driver ambiqmicro_flash;
+extern const struct flash_driver at91sam3_flash;
+extern const struct flash_driver at91sam4_flash;
+extern const struct flash_driver at91sam4l_flash;
+extern const struct flash_driver at91sam7_flash;
+extern const struct flash_driver at91samd_flash;
+extern const struct flash_driver ath79_flash;
+extern const struct flash_driver atsame5_flash;
+extern const struct flash_driver atsamv_flash;
+extern const struct flash_driver avr_flash;
+extern const struct flash_driver bluenrgx_flash;
+extern const struct flash_driver cc26xx_flash;
+extern const struct flash_driver cc3220sf_flash;
+extern const struct flash_driver cfi_flash;
+extern const struct flash_driver dsp5680xx_flash;
+extern const struct flash_driver efm32_flash;
+extern const struct flash_driver em357_flash;
+extern const struct flash_driver esirisc_flash;
+extern const struct flash_driver faux_flash;
+extern const struct flash_driver fespi_flash;
+extern const struct flash_driver fm3_flash;
+extern const struct flash_driver fm4_flash;
+extern const struct flash_driver jtagspi_flash;
+extern const struct flash_driver kinetis_flash;
+extern const struct flash_driver kinetis_ke_flash;
+extern const struct flash_driver lpc2000_flash;
+extern const struct flash_driver lpc288x_flash;
+extern const struct flash_driver lpc2900_flash;
+extern const struct flash_driver lpcspifi_flash;
+extern const struct flash_driver max32xxx_flash;
+extern const struct flash_driver mdr_flash;
+extern const struct flash_driver mrvlqspi_flash;
+extern const struct flash_driver msp432_flash;
+extern const struct flash_driver niietcm4_flash;
+extern const struct flash_driver npcx_flash;
+extern const struct flash_driver nrf51_flash;
+extern const struct flash_driver nrf5_flash;
+extern const struct flash_driver numicro_flash;
+extern const struct flash_driver ocl_flash;
+extern const struct flash_driver pic32mx_flash;
+extern const struct flash_driver psoc4_flash;
+extern const struct flash_driver psoc5lp_eeprom_flash;
+extern const struct flash_driver psoc5lp_flash;
+extern const struct flash_driver psoc5lp_nvl_flash;
+extern const struct flash_driver psoc6_flash;
+extern const struct flash_driver qn908x_flash;
+extern const struct flash_driver renesas_rpchf_flash;
+extern const struct flash_driver rp2040_flash;
+extern const struct flash_driver rsl10_flash;
+extern const struct flash_driver sh_qspi_flash;
+extern const struct flash_driver sim3x_flash;
+extern const struct flash_driver stellaris_flash;
+extern const struct flash_driver stm32f1x_flash;
+extern const struct flash_driver stm32f2x_flash;
+extern const struct flash_driver stm32h7x_flash;
+extern const struct flash_driver stm32l4x_flash;
+extern const struct flash_driver stm32lx_flash;
+extern const struct flash_driver stmqspi_flash;
+extern const struct flash_driver stmsmi_flash;
+extern const struct flash_driver str7x_flash;
+extern const struct flash_driver str9x_flash;
+extern const struct flash_driver str9xpec_flash;
+extern const struct flash_driver swm050_flash;
+extern const struct flash_driver tms470_flash;
+extern const struct flash_driver vexriscv_nor_spi;
+extern const struct flash_driver virtual_flash;
+extern const struct flash_driver w600_flash;
+extern const struct flash_driver xcf_flash;
+extern const struct flash_driver xmc1xxx_flash;
+extern const struct flash_driver xmc4xxx_flash;
 
 #endif /* OPENOCD_FLASH_NOR_DRIVER_H */

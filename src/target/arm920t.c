@@ -1,20 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -544,8 +533,8 @@ int arm920t_arch_state(struct target *target)
 static int arm920_mmu(struct target *target, int *enabled)
 {
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("%s: target not halted", __func__);
-		return ERROR_TARGET_INVALID;
+		LOG_TARGET_ERROR(target, "not halted");
+		return ERROR_TARGET_NOT_HALTED;
 	}
 
 	*enabled = target_to_arm920(target)->armv4_5_mmu.mmu_enabled;
@@ -1466,9 +1455,9 @@ COMMAND_HANDLER(arm920t_handle_cp15_command)
 		return retval;
 
 	if (target->state != TARGET_HALTED) {
-		command_print(CMD, "target must be stopped for "
+		command_print(CMD, "Error: target must be stopped for "
 			"\"%s\" command", CMD_NAME);
-		return ERROR_OK;
+		return ERROR_TARGET_NOT_HALTED;
 	}
 
 	/* one argument, read a register.

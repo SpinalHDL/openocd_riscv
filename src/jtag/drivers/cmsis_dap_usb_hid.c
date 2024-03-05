@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2018 by Mickaël Thomas                                  *
  *   mickael9@gmail.com                                                    *
@@ -16,19 +18,6 @@
  *                                                                         *
  *   Copyright (C) 2013 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -45,8 +34,39 @@ struct cmsis_dap_backend_data {
 	hid_device *dev_handle;
 };
 
+struct cmsis_dap_report_size {
+	unsigned short vid;
+	unsigned short pid;
+	unsigned int report_size;
+};
+
+static const struct cmsis_dap_report_size report_size_quirks[] = {
+	/* Third gen Atmel tools use a report size of 512 */
+    /* This list of PIDs comes from toolinfo.py in Microchip's pyedbglib. */
+	// Atmel JTAG-ICE 3
+	{ .vid = 0x03eb, .pid = 0x2140, .report_size = 512 },
+	// Atmel-ICE
+	{ .vid = 0x03eb, .pid = 0x2141, .report_size = 512 },
+	// Atmel Power Debugger
+	{ .vid = 0x03eb, .pid = 0x2144, .report_size = 512 },
+	// EDBG (found on Xplained Pro boards)
+	{ .vid = 0x03eb, .pid = 0x2111, .report_size = 512 },
+	// Zero (???)
+	{ .vid = 0x03eb, .pid = 0x2157, .report_size = 512 },
+	// EDBG with Mass Storage (found on Xplained Pro boards)
+	{ .vid = 0x03eb, .pid = 0x2169, .report_size = 512 },
+	// Commercially available EDBG (for third-party use)
+	{ .vid = 0x03eb, .pid = 0x216a, .report_size = 512 },
+	// Kraken (???)
+	{ .vid = 0x03eb, .pid = 0x2170, .report_size = 512 },
+
+	{ .vid = 0, .pid = 0, .report_size = 0 }
+};
+
+
 static void cmsis_dap_hid_close(struct cmsis_dap *dap);
 static int cmsis_dap_hid_alloc(struct cmsis_dap *dap, unsigned int pkt_sz);
+static void cmsis_dap_hid_free(struct cmsis_dap *dap);
 
 static int cmsis_dap_hid_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t pids[], const char *serial)
 {
@@ -149,13 +169,15 @@ static int cmsis_dap_hid_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t p
 
 	unsigned int packet_size = 64;
 
-	/* atmel cmsis-dap uses 512 byte reports */
-	/* except when it doesn't e.g. with mEDBG on SAMD10 Xplained
-	 * board */
+	/* Check for adapters that are known to have unusual report lengths. */
+	for (i = 0; report_size_quirks[i].vid != 0; i++) {
+		if (report_size_quirks[i].vid == target_vid &&
+		    report_size_quirks[i].pid == target_pid) {
+			packet_size = report_size_quirks[i].report_size;
+		}
+	}
 	/* TODO: HID report descriptor should be parsed instead of
-	 * hardcoding a match by VID */
-	if (target_vid == 0x03eb && target_pid != 0x2145 && target_pid != 0x2175)
-		packet_size = 512;
+	 * hardcoding a match by VID/PID */
 
 	dap->bdata->dev_handle = dev;
 
@@ -176,14 +198,21 @@ static void cmsis_dap_hid_close(struct cmsis_dap *dap)
 	hid_exit();
 	free(dap->bdata);
 	dap->bdata = NULL;
-	free(dap->packet_buffer);
-	dap->packet_buffer = NULL;
+	cmsis_dap_hid_free(dap);
 }
 
-static int cmsis_dap_hid_read(struct cmsis_dap *dap, int timeout_ms)
+static int cmsis_dap_hid_read(struct cmsis_dap *dap, int transfer_timeout_ms,
+							  struct timeval *wait_timeout)
 {
-	int retval = hid_read_timeout(dap->bdata->dev_handle, dap->packet_buffer, dap->packet_buffer_size, timeout_ms);
+	int timeout_ms;
+	if (wait_timeout)
+		timeout_ms = wait_timeout->tv_usec / 1000 + wait_timeout->tv_sec * 1000;
+	else
+		timeout_ms = transfer_timeout_ms;
 
+	int retval = hid_read_timeout(dap->bdata->dev_handle,
+								  dap->packet_buffer, dap->packet_buffer_size,
+								  timeout_ms);
 	if (retval == 0) {
 		return ERROR_TIMEOUT_REACHED;
 	} else if (retval == -1) {
@@ -224,12 +253,23 @@ static int cmsis_dap_hid_alloc(struct cmsis_dap *dap, unsigned int pkt_sz)
 
 	dap->packet_buffer = buf;
 	dap->packet_size = pkt_sz;
+	dap->packet_usable_size = pkt_sz;
 	dap->packet_buffer_size = packet_buffer_size;
 
 	dap->command = dap->packet_buffer + REPORT_ID_SIZE;
 	dap->response = dap->packet_buffer;
 
 	return ERROR_OK;
+}
+
+static void cmsis_dap_hid_free(struct cmsis_dap *dap)
+{
+	free(dap->packet_buffer);
+	dap->packet_buffer = NULL;
+}
+
+static void cmsis_dap_hid_cancel_all(struct cmsis_dap *dap)
+{
 }
 
 const struct cmsis_dap_backend cmsis_dap_hid_backend = {
@@ -239,4 +279,6 @@ const struct cmsis_dap_backend cmsis_dap_hid_backend = {
 	.read = cmsis_dap_hid_read,
 	.write = cmsis_dap_hid_write,
 	.packet_buffer_alloc = cmsis_dap_hid_alloc,
+	.packet_buffer_free = cmsis_dap_hid_free,
+	.cancel_all = cmsis_dap_hid_cancel_all,
 };

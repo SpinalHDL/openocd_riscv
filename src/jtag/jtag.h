@@ -1,28 +1,18 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
 *   Copyright (C) 2005 by Dominic Rath                                    *
 *   Dominic.Rath@gmx.de                                                   *
 *                                                                         *
 *   Copyright (C) 2007-2010 Øyvind Harboe                                 *
 *   oyvind.harboe@zylin.com                                               *
-*                                                                         *
-*   This program is free software; you can redistribute it and/or modify  *
-*   it under the terms of the GNU General Public License as published by  *
-*   the Free Software Foundation; either version 2 of the License, or     *
-*   (at your option) any later version.                                   *
-*                                                                         *
-*   This program is distributed in the hope that it will be useful,       *
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
-*   GNU General Public License for more details.                          *
-*                                                                         *
-*   You should have received a copy of the GNU General Public License     *
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
 ***************************************************************************/
 
 #ifndef OPENOCD_JTAG_JTAG_H
 #define OPENOCD_JTAG_JTAG_H
 
 #include <helper/binarybuffer.h>
+#include <helper/command.h>
 #include <helper/log.h>
 #include <helper/replacements.h>
 
@@ -125,7 +115,7 @@ struct jtag_tap {
 	uint32_t idcode; /**< device identification code */
 	/** not all devices have idcode,
 	 * we'll discover this during chain examination */
-	bool hasidcode;
+	bool has_idcode;
 
 	/** Array of expected identification codes */
 	uint32_t *expected_ids;
@@ -141,7 +131,10 @@ struct jtag_tap {
 	/** current instruction */
 	uint8_t *cur_instr;
 	/** Bypass register selected */
-	int bypass;
+	bool bypass;
+
+	/** Bypass instruction value */
+	uint64_t ir_bypass_value;
 
 	struct jtag_tap_event_action *event_action;
 
@@ -598,8 +591,21 @@ bool jtag_poll_get_enabled(void);
  */
 void jtag_poll_set_enabled(bool value);
 
+/**
+ * Mask (disable) polling and return the current mask status that should be
+ * feed to jtag_poll_unmask() to restore it.
+ * Multiple nested calls to jtag_poll_mask() are allowed, each balanced with
+ * its call to jtag_poll_unmask().
+ */
+bool jtag_poll_mask(void);
+
+/**
+ * Restore saved mask for polling.
+ */
+void jtag_poll_unmask(bool saved);
+
 #include <jtag/minidriver.h>
 
-int jim_jtag_newtap(Jim_Interp *interp, int argc, Jim_Obj *const *argv);
+__COMMAND_HANDLER(handle_jtag_newtap);
 
 #endif /* OPENOCD_JTAG_JTAG_H */

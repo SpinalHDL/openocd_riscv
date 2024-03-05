@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /**************************************************************************
 *   Copyright (C) 2012 by Andreas Fritiofson                              *
 *   andreas.fritiofson@gmail.com                                          *
-*                                                                         *
-*   This program is free software; you can redistribute it and/or modify  *
-*   it under the terms of the GNU General Public License as published by  *
-*   the Free Software Foundation; either version 2 of the License, or     *
-*   (at your option) any later version.                                   *
-*                                                                         *
-*   This program is distributed in the hope that it will be useful,       *
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
-*   GNU General Public License for more details.                          *
-*                                                                         *
-*   You should have received a copy of the GNU General Public License     *
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
 ***************************************************************************/
 
 /**
@@ -75,6 +64,7 @@
 #include <transport/transport.h>
 #include <helper/time_support.h>
 #include <helper/log.h>
+#include <helper/nvp.h>
 
 #if IS_CYGWIN == 1
 #include <windows.h>
@@ -235,7 +225,7 @@ static int ftdi_set_signal(const struct signal *s, char value)
 		oe = s->invert_oe;
 		break;
 	default:
-		assert(0 && "invalid signal level specifier");
+		LOG_ERROR("invalid signal level specifier \'%c\'(0x%02x)", value, value);
 		return ERROR_FAIL;
 	}
 
@@ -712,14 +702,14 @@ static void ftdi_execute_command(struct jtag_command *cmd)
 	}
 }
 
-static int ftdi_execute_queue(void)
+static int ftdi_execute_queue(struct jtag_command *cmd_queue)
 {
 	/* blink, if the current layout has that feature */
 	struct signal *led = find_signal_by_name("LED");
 	if (led)
 		ftdi_set_signal(led, '1');
 
-	for (struct jtag_command *cmd = jtag_command_queue; cmd; cmd = cmd->next) {
+	for (struct jtag_command *cmd = cmd_queue; cmd; cmd = cmd->next) {
 		/* fill the write buffer with the desired command */
 		ftdi_execute_command(cmd);
 	}
@@ -746,13 +736,8 @@ static int ftdi_initialize(void)
 		return ERROR_JTAG_INIT_FAILED;
 	}
 
-	for (int i = 0; ftdi_vid[i] || ftdi_pid[i]; i++) {
-		mpsse_ctx = mpsse_open(&ftdi_vid[i], &ftdi_pid[i], ftdi_device_desc,
+	mpsse_ctx = mpsse_open(ftdi_vid, ftdi_pid, ftdi_device_desc,
 				adapter_get_required_serial(), adapter_usb_get_location(), ftdi_channel);
-		if (mpsse_ctx)
-			break;
-	}
-
 	if (!mpsse_ctx)
 		return ERROR_JTAG_INIT_FAILED;
 
@@ -1228,7 +1213,7 @@ COMMAND_HANDLER(ftdi_handle_set_signal_command)
 		/* fallthrough */
 	default:
 		LOG_ERROR("unknown signal level '%s', use 0, 1 or z", CMD_ARGV[1]);
-		return ERROR_COMMAND_SYNTAX_ERROR;
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
 
 	return mpsse_flush(mpsse_ctx);
@@ -1288,22 +1273,22 @@ COMMAND_HANDLER(ftdi_handle_vid_pid_command)
 
 COMMAND_HANDLER(ftdi_handle_tdo_sample_edge_command)
 {
-	struct jim_nvp *n;
-	static const struct jim_nvp nvp_ftdi_jtag_modes[] = {
+	const struct nvp *n;
+	static const struct nvp nvp_ftdi_jtag_modes[] = {
 		{ .name = "rising", .value = JTAG_MODE },
 		{ .name = "falling", .value = JTAG_MODE_ALT },
 		{ .name = NULL, .value = -1 },
 	};
 
 	if (CMD_ARGC > 0) {
-		n = jim_nvp_name2value_simple(nvp_ftdi_jtag_modes, CMD_ARGV[0]);
+		n = nvp_name2value(nvp_ftdi_jtag_modes, CMD_ARGV[0]);
 		if (!n->name)
 			return ERROR_COMMAND_SYNTAX_ERROR;
 		ftdi_jtag_mode = n->value;
 
 	}
 
-	n = jim_nvp_value2name_simple(nvp_ftdi_jtag_modes, ftdi_jtag_mode);
+	n = nvp_value2name(nvp_ftdi_jtag_modes, ftdi_jtag_mode);
 	command_print(CMD, "ftdi samples TDO on %s edge of TCK", n->name);
 
 	return ERROR_OK;

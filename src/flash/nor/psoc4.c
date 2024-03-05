@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -10,19 +12,6 @@
  *                                                                         *
  *   Copyright (C) 2014 by Tomas Vanek (PSoC 4 support derived from STM32) *
  *   vanekt@fbl.cz                                                         *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -662,9 +651,6 @@ static int psoc4_write(struct flash_bank *bank, const uint8_t *buffer,
 	if (row_offset)
 		memset(row_buffer, bank->default_padded_value, row_offset);
 
-	bool save_poll = jtag_poll_get_enabled();
-	jtag_poll_set_enabled(false);
-
 	while (count) {
 		uint32_t chunk_size = psoc4_info->row_size - row_offset;
 		if (chunk_size > count) {
@@ -704,8 +690,6 @@ static int psoc4_write(struct flash_bank *bank, const uint8_t *buffer,
 	}
 
 cleanup:
-	jtag_poll_set_enabled(save_poll);
-
 	free(sysrq_buffer);
 	return retval;
 }
@@ -785,7 +769,7 @@ static int psoc4_probe(struct flash_bank *bank)
 		num_macros++;
 	}
 
-	LOG_DEBUG("SPCIF geometry: %" PRIu32 " kb flash, row %" PRIu32 " bytes.",
+	LOG_DEBUG("SPCIF geometry: %" PRIu32 " KiB flash, row %" PRIu32 " bytes.",
 		 flash_size_in_kb, row_size);
 
 	/* if the user sets the size manually then ignore the probed value
@@ -795,11 +779,11 @@ static int psoc4_probe(struct flash_bank *bank)
 		flash_size_in_kb = psoc4_info->user_bank_size / 1024;
 	}
 
-	char macros_txt[20] = "";
+	char macros_txt[22] = "";
 	if (num_macros > 1)
 		snprintf(macros_txt, sizeof(macros_txt), " in %" PRIu32 " macros", num_macros);
 
-	LOG_INFO("flash size = %" PRIu32 " kbytes%s", flash_size_in_kb, macros_txt);
+	LOG_INFO("flash size = %" PRIu32 " KiB%s", flash_size_in_kb, macros_txt);
 
 	/* calculate number of pages */
 	uint32_t num_rows = flash_size_in_kb * 1024 / row_size;

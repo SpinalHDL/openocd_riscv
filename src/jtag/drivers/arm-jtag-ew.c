@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2009 by Dimitar Dimitrov <dinuxbg@gmail.com>            *
  *   based on Dominic Rath's and Benedikt Sauter's usbprog.c               *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -96,9 +85,9 @@ static struct armjtagew *armjtagew_handle;
 /**************************************************************************
  * External interface implementation */
 
-static int armjtagew_execute_queue(void)
+static int armjtagew_execute_queue(struct jtag_command *cmd_queue)
 {
-	struct jtag_command *cmd = jtag_command_queue;
+	struct jtag_command *cmd = cmd_queue;
 	int scan_size;
 	enum scan_type type;
 	uint8_t *buffer;
@@ -224,7 +213,7 @@ static int armjtagew_init(void)
 
 	armjtagew_handle = armjtagew_usb_open();
 
-	if (armjtagew_handle == 0) {
+	if (!armjtagew_handle) {
 		LOG_ERROR(
 			"Cannot find ARM-JTAG-EW Interface! Please check connection and permissions.");
 		return ERROR_JTAG_INIT_FAILED;
@@ -688,7 +677,7 @@ static struct armjtagew *armjtagew_usb_open(void)
 	const uint16_t pids[] = { USB_PID, 0 };
 	struct libusb_device_handle *dev;
 
-	if (jtag_libusb_open(vids, pids, &dev, NULL) != ERROR_OK)
+	if (jtag_libusb_open(vids, pids, NULL, &dev, NULL) != ERROR_OK)
 		return NULL;
 
 	struct armjtagew *result = malloc(sizeof(struct armjtagew));
@@ -787,17 +776,12 @@ static int armjtagew_usb_read(struct armjtagew *armjtagew, int exp_in_length)
 
 static void armjtagew_debug_buffer(uint8_t *buffer, int length)
 {
-	char line[81];
-	char s[4];
-	int i;
-	int j;
+	char line[8 + 3 * BYTES_PER_LINE + 1];
 
-	for (i = 0; i < length; i += BYTES_PER_LINE) {
-		snprintf(line, 5, "%04x", i);
-		for (j = i; j < i + BYTES_PER_LINE && j < length; j++) {
-			snprintf(s, 4, " %02x", buffer[j]);
-			strcat(line, s);
-		}
+	for (int i = 0; i < length; i += BYTES_PER_LINE) {
+		int n = snprintf(line, 9, "%04x", i);
+		for (int j = i; j < i + BYTES_PER_LINE && j < length; j++)
+			n += snprintf(line + n, 4, " %02x", buffer[j]);
 		LOG_DEBUG("%s", line);
 
 		/* Prevent GDB timeout (writing to log might take some time) */

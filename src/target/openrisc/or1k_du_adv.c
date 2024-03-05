@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2013-2014 by Franck Jullien                             *
  *   elec4fun@gmail.com                                                    *
@@ -9,19 +11,6 @@
  *   And the Mohor interface version of this file which is:                *
  *   Copyright (C) 2011 by Julius Baxter                                   *
  *   julius@opencores.org                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -33,8 +22,9 @@
 #include "or1k_du.h"
 #include "jsp_server.h"
 
-#include <target/target.h>
+#include <helper/crc32.h>
 #include <jtag/jtag.h>
+#include <target/target.h>
 
 #define JSP_BANNER "\n\r" \
 		   "******************************\n\r" \
@@ -77,13 +67,6 @@
 /* CPU control register bits mask */
 #define DBG_CPU_CR_STALL		0x01
 #define DBG_CPU_CR_RESET		0x02
-
-/* Polynomial for the CRC calculation
- * Yes, it's backwards.  Yes, this is on purpose.
- * The hardware is designed this way to save on logic and routing,
- * and it's really all the same to us here.
- */
-#define ADBG_CRC_POLY			0xedb88320
 
 /* These are for the internal registers in the Wishbone module
  * The first is the length of the index register,
@@ -143,20 +126,6 @@
 static struct or1k_du or1k_du_adv;
 
 static const char * const chain_name[] = {"WISHBONE", "CPU0", "CPU1", "JSP"};
-
-static uint32_t adbg_compute_crc(uint32_t crc, uint32_t data_in,
-				 int length_bits)
-{
-	for (int i = 0; i < length_bits; i++) {
-		uint32_t d, c;
-		d = ((data_in >> i) & 0x1) ? 0xffffffff : 0;
-		c = (crc & 0x1) ? 0xffffffff : 0;
-		crc = crc >> 1;
-		crc = crc ^ ((d ^ c) & ADBG_CRC_POLY);
-	}
-
-	return crc;
-}
 
 static int find_status_bit(void *_buf, int len)
 {
@@ -533,9 +502,8 @@ retry_read_full:
 	memcpy(data, in_buffer, total_size_bytes);
 	memcpy(&crc_read, &in_buffer[total_size_bytes], 4);
 
-	uint32_t crc_calc = 0xffffffff;
-	for (int i = 0; i < total_size_bytes; i++)
-		crc_calc = adbg_compute_crc(crc_calc, data[i], 8);
+	uint32_t crc_calc = crc32_le(CRC32_POLY_LE, 0xffffffff, data,
+			total_size_bytes);
 
 	if (crc_calc != crc_read) {
 		LOG_WARNING("CRC ERROR! Computed 0x%08" PRIx32 ", read CRC 0x%08" PRIx32, crc_calc, crc_read);
@@ -661,9 +629,8 @@ retry_full_write:
 	field[0].out_value = &value;
 	field[0].in_value = NULL;
 
-	uint32_t crc_calc = 0xffffffff;
-	for (int i = 0; i < (count * size); i++)
-		crc_calc = adbg_compute_crc(crc_calc, data[i], 8);
+	uint32_t crc_calc = crc32_le(CRC32_POLY_LE, 0xffffffff, data,
+			count * size);
 
 	field[1].num_bits = count * size * 8;
 	field[1].out_value = data;
@@ -945,7 +912,7 @@ static int or1k_adv_jtag_write_memory(struct or1k_jtag *jtag_info,
 	void *t = NULL;
 	struct target *target = jtag_info->target;
 	if ((target->endianness == TARGET_BIG_ENDIAN) && (size != 1)) {
-		t = malloc(count * size * sizeof(uint8_t));
+		t = calloc(count * size, sizeof(uint8_t));
 		if (!t) {
 			LOG_ERROR("Out of memory");
 			return ERROR_FAIL;
@@ -958,6 +925,9 @@ static int or1k_adv_jtag_write_memory(struct or1k_jtag *jtag_info,
 		case 2:
 			buf_bswap16(t, buffer, size * count);
 			break;
+		default:
+			free(t);
+			return ERROR_TARGET_FAILURE;
 		}
 		buffer = t;
 	}

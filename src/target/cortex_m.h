@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2008 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_TARGET_CORTEX_M_H
@@ -28,7 +17,7 @@
 #include "armv7m.h"
 #include "helper/bits.h"
 
-#define CORTEX_M_COMMON_MAGIC 0x1A451A45
+#define CORTEX_M_COMMON_MAGIC 0x1A451A45U
 
 #define SYSTEM_CONTROL_BASE 0x400FE000
 
@@ -42,21 +31,35 @@
 
 #define CPUID		0xE000ED00
 
-#define ARM_CPUID_PARTNO_POS    4
-#define ARM_CPUID_PARTNO_MASK	(0xFFF << ARM_CPUID_PARTNO_POS)
+#define ARM_CPUID_IMPLEMENTOR_POS	24
+#define ARM_CPUID_IMPLEMENTOR_MASK	(0xFF << ARM_CPUID_IMPLEMENTOR_POS)
+#define ARM_CPUID_PARTNO_POS		4
+#define ARM_CPUID_PARTNO_MASK		(0xFFF << ARM_CPUID_PARTNO_POS)
 
-enum cortex_m_partno {
+#define ARM_MAKE_CPUID(impl, partno)	((((impl) << ARM_CPUID_IMPLEMENTOR_POS) & ARM_CPUID_IMPLEMENTOR_MASK) | \
+	(((partno) << ARM_CPUID_PARTNO_POS)  & ARM_CPUID_PARTNO_MASK))
+
+/** Known Arm Cortex masked CPU Ids
+ * This includes the implementor and part number, but _not_ the revision or
+ * patch fields.
+ */
+enum cortex_m_impl_part {
 	CORTEX_M_PARTNO_INVALID,
-	CORTEX_M0_PARTNO   = 0xC20,
-	CORTEX_M1_PARTNO   = 0xC21,
-	CORTEX_M3_PARTNO   = 0xC23,
-	CORTEX_M4_PARTNO   = 0xC24,
-	CORTEX_M7_PARTNO   = 0xC27,
-	CORTEX_M0P_PARTNO  = 0xC60,
-	CORTEX_M23_PARTNO  = 0xD20,
-	CORTEX_M33_PARTNO  = 0xD21,
-	CORTEX_M35P_PARTNO = 0xD31,
-	CORTEX_M55_PARTNO  = 0xD22,
+	STAR_MC1_PARTNO      = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0x132), /* FIXME - confirm implementor! */
+	CORTEX_M0_PARTNO     = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xC20),
+	CORTEX_M1_PARTNO     = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xC21),
+	CORTEX_M3_PARTNO     = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xC23),
+	CORTEX_M4_PARTNO     = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xC24),
+	CORTEX_M7_PARTNO     = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xC27),
+	CORTEX_M0P_PARTNO    = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xC60),
+	CORTEX_M23_PARTNO    = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xD20),
+	CORTEX_M33_PARTNO    = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xD21),
+	CORTEX_M35P_PARTNO   = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xD31),
+	CORTEX_M55_PARTNO    = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xD22),
+	CORTEX_M85_PARTNO    = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_ARM, 0xD23),
+	INFINEON_SLX2_PARTNO = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_INFINEON, 0xDB0),
+	REALTEK_M200_PARTNO  = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_REALTEK, 0xd20),
+	REALTEK_M300_PARTNO  = ARM_MAKE_CPUID(ARM_IMPLEMENTOR_REALTEK, 0xd22),
 };
 
 /* Relevant Cortex-M flags, used in struct cortex_m_part_info.flags */
@@ -65,7 +68,7 @@ enum cortex_m_partno {
 #define CORTEX_M_F_TAR_AUTOINCR_BLOCK_4K  BIT(2)
 
 struct cortex_m_part_info {
-	enum cortex_m_partno partno;
+	enum cortex_m_impl_part impl_part;
 	const char *name;
 	enum arm_arch arch;
 	uint32_t flags;
@@ -78,6 +81,9 @@ struct cortex_m_part_info {
 #define DCB_DEMCR	0xE000EDFC
 #define DCB_DSCSR	0xE000EE08
 
+#define DAUTHSTATUS	0xE000EFB8
+#define DAUTHSTATUS_SID_MASK	0x00000030
+
 #define DCRSR_WNR	BIT(16)
 
 #define DWT_CTRL	0xE0001000
@@ -88,7 +94,8 @@ struct cortex_m_part_info {
 #define DWT_FUNCTION0	0xE0001028
 #define DWT_DEVARCH		0xE0001FBC
 
-#define DWT_DEVARCH_ARMV8M	0x101A02
+#define DWT_DEVARCH_ARMV8M_V2_0	0x101A02
+#define DWT_DEVARCH_ARMV8M_V2_1	0x111A02
 
 #define FP_CTRL		0xE0002000
 #define FP_REMAP	0xE0002004
@@ -210,11 +217,15 @@ enum cortex_m_isrmasking_mode {
 };
 
 struct cortex_m_common {
-	int common_magic;
+	unsigned int common_magic;
+
+	struct armv7m_common armv7m;
 
 	/* Context information */
 	uint32_t dcb_dhcsr;
 	uint32_t dcb_dhcsr_cumulated_sticky;
+	/* DCB DHCSR has been at least once read, so the sticky bits have been reset */
+	bool dcb_dhcsr_sticky_is_recent;
 	uint32_t nvic_dfsr;  /* Debug Fault Status Register - shows reason for debug halt */
 	uint32_t nvic_icsr;  /* Interrupt Control State Register - shows active and pending IRQ */
 
@@ -237,11 +248,10 @@ struct cortex_m_common {
 	enum cortex_m_isrmasking_mode isrmasking_mode;
 
 	const struct cortex_m_part_info *core_info;
-	struct armv7m_common armv7m;
 
 	bool slow_register_read;	/* A register has not been ready, poll S_REGRDY */
 
-	int apsel;
+	uint64_t apsel;
 
 	/* Whether this target has the erratum that makes C_MASKINTS not apply to
 	 * already pending interrupts */
@@ -296,11 +306,11 @@ target_to_cortex_m_safe(struct target *target)
 }
 
 /**
- * @returns cached value of Cortex-M part number
+ * @returns cached value of the cpuid, masked for implementation and part.
  * or CORTEX_M_PARTNO_INVALID if the magic number does not match
  * or core_info is not initialised.
  */
-static inline enum cortex_m_partno cortex_m_get_partno_safe(struct target *target)
+static inline enum cortex_m_impl_part cortex_m_get_impl_part(struct target *target)
 {
 	struct cortex_m_common *cortex_m = target_to_cortex_m_safe(target);
 	if (!cortex_m)
@@ -309,7 +319,7 @@ static inline enum cortex_m_partno cortex_m_get_partno_safe(struct target *targe
 	if (!cortex_m->core_info)
 		return CORTEX_M_PARTNO_INVALID;
 
-	return cortex_m->core_info->partno;
+	return cortex_m->core_info->impl_part;
 }
 
 int cortex_m_examine(struct target *target);

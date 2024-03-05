@@ -1,18 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2012 by Creative Product Design, marc @ cpdesign.com.au *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 /* 2014-12: Addition of the SWD protocol support is based on the initial work
@@ -582,7 +571,7 @@ static struct bitbang_interface sysfsgpio_bitbang = {
 	.swdio_read = sysfsgpio_swdio_read,
 	.swdio_drive = sysfsgpio_swdio_drive,
 	.swd_write = sysfsgpio_swd_write,
-	.blink = 0
+	.blink = NULL,
 };
 
 /* helper func to close and cleanup files only if they were valid/ used */

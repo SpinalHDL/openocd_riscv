@@ -1,19 +1,8 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2015 by Uwe Bonnes                                      *
  *   bon@elektron.ikp.physik.tu-darmstadt.de                               *
- *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_FLASH_NOR_STM32L4X
@@ -98,6 +87,8 @@
 /* Supported device IDs */
 #define DEVID_STM32L47_L48XX	0x415
 #define DEVID_STM32L43_L44XX	0x435
+#define DEVID_STM32C01XX		0x443
+#define DEVID_STM32C03XX		0x453
 #define DEVID_STM32G05_G06XX	0x456
 #define DEVID_STM32G07_G08XX	0x460
 #define DEVID_STM32L49_L4AXX	0x461
@@ -112,6 +103,7 @@
 #define DEVID_STM32L55_L56XX	0x472
 #define DEVID_STM32G49_G4AXX	0x479
 #define DEVID_STM32U57_U58XX	0x482
+#define DEVID_STM32WBA5X		0x492
 #define DEVID_STM32WB1XX		0x494
 #define DEVID_STM32WB5XX		0x495
 #define DEVID_STM32WB3XX		0x496

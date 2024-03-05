@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2020 by Tarek Bochkati                                  *
  *   Tarek Bochkati <tarek.bouchkati@gmail.com>                            *
@@ -13,19 +15,6 @@
  *   spen@spen-soft.co.uk                                                  *
  *                                                                         *
  *   This code is based on https://github.com/texane/stlink                *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -95,6 +84,8 @@
 #define STLINK_V3S_PID          (0x374F)
 #define STLINK_V3_2VCP_PID      (0x3753)
 #define STLINK_V3E_NO_MSD_PID   (0x3754)
+#define STLINK_V3P_USBLOADER_PID (0x3755)
+#define STLINK_V3P_PID           (0x3757)
 
 /*
  * ST-Link/V1, ST-Link/V2 and ST-Link/V2.1 are full-speed USB devices and
@@ -465,7 +456,7 @@ static inline int stlink_usb_xfer_noerrcheck(void *handle, const uint8_t *buf, i
 #define STLINK_DEBUG_PORT_ACCESS            0xffff
 
 #define STLINK_TRACE_SIZE               4096
-#define STLINK_TRACE_MAX_HZ             2000000
+#define STLINK_TRACE_MAX_HZ             2250000
 #define STLINK_V3_TRACE_MAX_HZ          24000000
 
 #define STLINK_V3_MAX_FREQ_NB               10
@@ -504,6 +495,8 @@ static inline int stlink_usb_xfer_noerrcheck(void *handle, const uint8_t *buf, i
 #define STLINK_TCP_SS_CMD_NOT_AVAILABLE      0x00001053
 #define STLINK_TCP_SS_TCP_ERROR              0x00002001
 #define STLINK_TCP_SS_TCP_CANT_CONNECT       0x00002002
+#define STLINK_TCP_SS_TCP_CLOSE_ERROR        0x00002003
+#define STLINK_TCP_SS_TCP_BUSY               0x00002004
 #define STLINK_TCP_SS_WIN32_ERROR            0x00010000
 
 /*
@@ -971,6 +964,11 @@ static int stlink_tcp_send_cmd(void *handle, int send_size, int recv_size, bool 
 	if (check_tcp_status) {
 		uint32_t tcp_ss = le_to_h_u32(h->tcp_backend_priv.recv_buf);
 		if (tcp_ss != STLINK_TCP_SS_OK) {
+			if (tcp_ss == STLINK_TCP_SS_TCP_BUSY) {
+				LOG_DEBUG("TCP busy");
+				return ERROR_WAIT;
+			}
+
 			LOG_ERROR("TCP error status 0x%X", tcp_ss);
 			return ERROR_FAIL;
 		}
@@ -1301,8 +1299,8 @@ static int stlink_usb_version(void *handle)
 		break;
 	}
 
-	/* STLINK-V3 requires a specific command */
-	if (v == 3 && x == 0 && y == 0) {
+	/* STLINK-V3 & STLINK-V3P require a specific command */
+	if (v >= 3 && x == 0 && y == 0) {
 		stlink_usb_init_buffer(handle, h->rx_ep, 16);
 
 		h->cmdbuf[h->cmdidx++] = STLINK_APIV3_GET_VERSION_EX;
@@ -1417,6 +1415,41 @@ static int stlink_usb_version(void *handle)
 		/* 8bit read/write max packet size 512 bytes from V3J6 */
 		if (h->version.jtag >= 6)
 			flags |= STLINK_F_HAS_RW8_512BYTES;
+
+		break;
+	case 4:
+		/* STLINK-V3P use api-v3 */
+		h->version.jtag_api = STLINK_JTAG_API_V3;
+
+		/* STLINK-V3P is a superset of ST-LINK/V3 */
+
+		/* API for trace */
+		/* API for target voltage */
+		flags |= STLINK_F_HAS_TRACE;
+
+		/* preferred API to get last R/W status */
+		flags |= STLINK_F_HAS_GETLASTRWSTATUS2;
+
+		/* API to access DAP registers */
+		flags |= STLINK_F_HAS_DAP_REG;
+
+		/* API to read/write memory at 16 bit */
+		/* API to write memory without address increment */
+		flags |= STLINK_F_HAS_MEM_16BIT;
+
+		/* API required to init AP before any AP access */
+		flags |= STLINK_F_HAS_AP_INIT;
+
+		/* API required to return proper error code on close AP */
+		flags |= STLINK_F_FIX_CLOSE_AP;
+
+		/* Banked regs (DPv1 & DPv2) support */
+		/* API to read memory without address increment */
+		/* Memory R/W supports CSW */
+		flags |= STLINK_F_HAS_DPBANKSEL;
+
+		/* 8bit read/write max packet size 512 bytes */
+		flags |= STLINK_F_HAS_RW8_512BYTES;
 
 		break;
 	default:
@@ -3373,7 +3406,7 @@ static int stlink_usb_usb_open(void *handle, struct hl_interface_param_s *param)
 	  in order to become operational.
 	 */
 	do {
-		if (jtag_libusb_open(param->vid, param->pid,
+		if (jtag_libusb_open(param->vid, param->pid, NULL,
 				&h->usb_backend_priv.fd, stlink_usb_get_alternate_serial) != ERROR_OK) {
 			LOG_ERROR("open failed");
 			return ERROR_FAIL;
@@ -3406,6 +3439,8 @@ static int stlink_usb_usb_open(void *handle, struct hl_interface_param_s *param)
 			case STLINK_V3S_PID:
 			case STLINK_V3_2VCP_PID:
 			case STLINK_V3E_NO_MSD_PID:
+			case STLINK_V3P_USBLOADER_PID:
+			case STLINK_V3P_PID:
 				h->version.stlink = 3;
 				h->tx_ep = STLINK_V2_1_TX_EP;
 				h->trace_ep = STLINK_V2_1_TRACE_EP;
@@ -3698,7 +3733,7 @@ static int stlink_open(struct hl_interface_param_s *param, enum stlink_mode mode
 
 	h = calloc(1, sizeof(struct stlink_usb_handle_s));
 
-	if (h == 0) {
+	if (!h) {
 		LOG_DEBUG("malloc failed");
 		return ERROR_FAIL;
 	}
@@ -3824,7 +3859,7 @@ static int stlink_config_trace(void *handle, bool enabled,
 		return ERROR_FAIL;
 	}
 
-	unsigned int max_trace_freq = (h->version.stlink == 3) ?
+	unsigned int max_trace_freq = (h->version.stlink >= 3) ?
 			STLINK_V3_TRACE_MAX_HZ : STLINK_TRACE_MAX_HZ;
 
 	/* Only concern ourselves with the frequency if the STlink is processing it. */
@@ -4145,7 +4180,7 @@ static int stlink_dap_reinit_interface(void)
 	stlink_dap_handle->reconnect_pending = false;
 	/* on new FW, calling mode-leave closes all the opened AP; reopen them! */
 	if (stlink_dap_handle->version.flags & STLINK_F_HAS_AP_INIT)
-		for (int apsel = 0; apsel <= DP_APSEL_MAX; apsel++)
+		for (unsigned int apsel = 0; apsel <= DP_APSEL_MAX; apsel++)
 			if (test_bit(apsel, opened_ap)) {
 				clear_bit(apsel, opened_ap);
 				stlink_dap_open_ap(apsel);
@@ -4279,7 +4314,15 @@ static int stlink_dap_ap_read(struct adiv5_ap *ap, unsigned int reg, uint32_t *d
 	uint32_t dummy;
 	int retval;
 
-	if (reg != AP_REG_IDR) {
+	if (is_adiv6(dap)) {
+		static bool error_flagged;
+		if (!error_flagged)
+			LOG_ERROR("ADIv6 dap not supported by stlink dap-direct mode");
+		error_flagged = true;
+		return ERROR_FAIL;
+	}
+
+	if (reg != ADIV5_AP_REG_IDR) {
 		retval = stlink_dap_open_ap(ap->ap_num);
 		if (retval != ERROR_OK)
 			return retval;
@@ -4296,6 +4339,14 @@ static int stlink_dap_ap_write(struct adiv5_ap *ap, unsigned int reg, uint32_t d
 {
 	struct adiv5_dap *dap = ap->dap;
 	int retval;
+
+	if (is_adiv6(dap)) {
+		static bool error_flagged;
+		if (!error_flagged)
+			LOG_ERROR("ADIv6 dap not supported by stlink dap-direct mode");
+		error_flagged = true;
+		return ERROR_FAIL;
+	}
 
 	retval = stlink_dap_open_ap(ap->ap_num);
 	if (retval != ERROR_OK)
@@ -4325,7 +4376,7 @@ static int stlink_usb_misc_rw_segment(void *handle, const struct dap_queue *q, u
 
 	LOG_DEBUG("Queue: %u commands in %u items", len, items);
 
-	int ap_num = DP_APSEL_INVALID;
+	uint32_t ap_num = DP_APSEL_INVALID;
 	unsigned int cmd_index = 0;
 	unsigned int val_index = ALIGN_UP(items, 4);
 	for (unsigned int i = 0; i < len; i++) {
@@ -4474,7 +4525,7 @@ static int stlink_usb_count_misc_rw_queue(void *handle, const struct dap_queue *
 {
 	struct stlink_usb_handle_s *h = handle;
 	unsigned int i, items = 0;
-	int ap_num = DP_APSEL_INVALID;
+	uint32_t ap_num = DP_APSEL_INVALID;
 	unsigned int misc_max_items = (h->version.stlink == 2) ? STLINK_V2_RW_MISC_SIZE : STLINK_V3_RW_MISC_SIZE;
 
 	if (!(h->version.flags & STLINK_F_HAS_RW_MISC))
@@ -4584,7 +4635,7 @@ static void stlink_dap_run_internal(struct adiv5_dap *dap)
 			break;
 		case CMD_AP_WRITE:
 			/* ignore increment packed, not supported */
-			if (q->ap_w.reg == MEM_AP_REG_CSW)
+			if (q->ap_w.reg == ADIV5_MEM_AP_REG_CSW)
 				q->ap_w.data &= ~CSW_ADDRINC_PACKED;
 			retval = stlink_dap_ap_write(q->ap_w.ap, q->ap_w.reg, q->ap_w.data);
 			break;
@@ -4729,18 +4780,18 @@ static int stlink_dap_op_queue_ap_read(struct adiv5_ap *ap, unsigned int reg,
 	/* test STLINK_F_HAS_CSW implicitly tests STLINK_F_HAS_MEM_16BIT, STLINK_F_HAS_MEM_RD_NO_INC
 	 * and STLINK_F_HAS_RW_MISC */
 	if ((stlink_dap_handle->version.flags & STLINK_F_HAS_CSW) &&
-			(reg == MEM_AP_REG_DRW || reg == MEM_AP_REG_BD0 || reg == MEM_AP_REG_BD1 ||
-			 reg == MEM_AP_REG_BD2 || reg == MEM_AP_REG_BD3)) {
+			(reg == ADIV5_MEM_AP_REG_DRW || reg == ADIV5_MEM_AP_REG_BD0 || reg == ADIV5_MEM_AP_REG_BD1 ||
+			 reg == ADIV5_MEM_AP_REG_BD2 || reg == ADIV5_MEM_AP_REG_BD3)) {
 		/* de-queue previous write-TAR */
 		struct dap_queue *prev_q = q - 1;
-		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_TAR) {
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == ADIV5_MEM_AP_REG_TAR) {
 			stlink_dap_handle->queue_index = i;
 			i--;
 			q = prev_q;
 			prev_q--;
 		}
 		/* de-queue previous write-CSW if it didn't changed ap->csw_default */
-		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_CSW &&
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == ADIV5_MEM_AP_REG_CSW &&
 				!prev_q->ap_w.changes_csw_default) {
 			stlink_dap_handle->queue_index = i;
 			q = prev_q;
@@ -4762,7 +4813,7 @@ static int stlink_dap_op_queue_ap_read(struct adiv5_ap *ap, unsigned int reg,
 			return ERROR_FAIL;
 		}
 
-		q->mem_ap.addr = (reg == MEM_AP_REG_DRW) ? ap->tar_value : ((ap->tar_value & ~0x0f) | (reg & 0x0c));
+		q->mem_ap.addr = (reg == ADIV5_MEM_AP_REG_DRW) ? ap->tar_value : ((ap->tar_value & ~0x0f) | (reg & 0x0c));
 		q->mem_ap.ap = ap;
 		q->mem_ap.p_data = data;
 		q->mem_ap.csw = ap->csw_default;
@@ -4795,18 +4846,18 @@ static int stlink_dap_op_queue_ap_write(struct adiv5_ap *ap, unsigned int reg,
 	/* test STLINK_F_HAS_CSW implicitly tests STLINK_F_HAS_MEM_16BIT, STLINK_F_HAS_MEM_WR_NO_INC
 	 * and STLINK_F_HAS_RW_MISC */
 	if ((stlink_dap_handle->version.flags & STLINK_F_HAS_CSW) &&
-			(reg == MEM_AP_REG_DRW || reg == MEM_AP_REG_BD0 || reg == MEM_AP_REG_BD1 ||
-			 reg == MEM_AP_REG_BD2 || reg == MEM_AP_REG_BD3)) {
+			(reg == ADIV5_MEM_AP_REG_DRW || reg == ADIV5_MEM_AP_REG_BD0 || reg == ADIV5_MEM_AP_REG_BD1 ||
+			 reg == ADIV5_MEM_AP_REG_BD2 || reg == ADIV5_MEM_AP_REG_BD3)) {
 		/* de-queue previous write-TAR */
 		struct dap_queue *prev_q = q - 1;
-		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_TAR) {
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == ADIV5_MEM_AP_REG_TAR) {
 			stlink_dap_handle->queue_index = i;
 			i--;
 			q = prev_q;
 			prev_q--;
 		}
 		/* de-queue previous write-CSW if it didn't changed ap->csw_default */
-		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == MEM_AP_REG_CSW &&
+		if (i && prev_q->cmd == CMD_AP_WRITE && prev_q->ap_w.ap == ap && prev_q->ap_w.reg == ADIV5_MEM_AP_REG_CSW &&
 				!prev_q->ap_w.changes_csw_default) {
 			stlink_dap_handle->queue_index = i;
 			q = prev_q;
@@ -4828,7 +4879,7 @@ static int stlink_dap_op_queue_ap_write(struct adiv5_ap *ap, unsigned int reg,
 			return ERROR_FAIL;
 		}
 
-		q->mem_ap.addr = (reg == MEM_AP_REG_DRW) ? ap->tar_value : ((ap->tar_value & ~0x0f) | (reg & 0x0c));
+		q->mem_ap.addr = (reg == ADIV5_MEM_AP_REG_DRW) ? ap->tar_value : ((ap->tar_value & ~0x0f) | (reg & 0x0c));
 		q->mem_ap.ap = ap;
 		q->mem_ap.data = data;
 		q->mem_ap.csw = ap->csw_default;
@@ -4841,9 +4892,10 @@ static int stlink_dap_op_queue_ap_write(struct adiv5_ap *ap, unsigned int reg,
 		q->ap_w.reg = reg;
 		q->ap_w.ap = ap;
 		q->ap_w.data = data;
-		if (reg == MEM_AP_REG_CSW && ap->csw_default != last_csw_default[ap->ap_num]) {
+		uint8_t ap_num = ap->ap_num;
+		if (reg == ADIV5_MEM_AP_REG_CSW && ap->csw_default != last_csw_default[ap_num]) {
 			q->ap_w.changes_csw_default = true;
-			last_csw_default[ap->ap_num] = ap->csw_default;
+			last_csw_default[ap_num] = ap->csw_default;
 		} else {
 			q->ap_w.changes_csw_default = false;
 		}

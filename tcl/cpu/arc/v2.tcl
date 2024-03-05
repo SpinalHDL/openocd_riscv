@@ -1,8 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 #  Copyright (C) 2015, 2020 Synopsys, Inc.
 #  Anton Kolesov <anton.kolesov@synopsys.com>
 #  Didin Evgeniy <didin@synopsys.com>
-#
-# SPDX-License-Identifier: GPL-2.0-or-later
 
 source [find cpu/arc/common.tcl]
 
@@ -173,8 +173,8 @@ proc arc_v2_init_regs { } {
 		r19      19 uint32
 		r20      20 uint32
 		r21      21 uint32
-		r22      23 uint32
-		r23      24 uint32
+		r22      22 uint32
+		r23      23 uint32
 		r24      24 uint32
 		r25      25 uint32
 		gp       26 data_ptr

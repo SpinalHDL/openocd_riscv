@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /*
  * Copyright (C) 2005 by Dominic Rath
  * Dominic.Rath@gmx.de
@@ -10,19 +12,6 @@
  *
  * Copyright (C) 2009 by Øyvind Harboe
  * oyvind.harboe@zylin.com
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef OPENOCD_TARGET_ARM_OPCODES_H
@@ -198,6 +187,17 @@
 	(0xee100010 | (crm) | ((op2) << 5) | ((cp) << 8) \
 	| ((rd) << 12) | ((crn) << 16) | ((op1) << 21))
 
+/* Move to two ARM registers from coprocessor
+ * cp: Coprocessor number
+ * op: Coprocessor opcode
+ * rt: destination register 1
+ * rt2: destination register 2
+ * crm: coprocessor source register
+ */
+#define ARMV5_T_MRRC(cp, op, rt, rt2, crm) \
+	(0xec500000 | (crm) | ((op) << 4) | ((cp) << 8) \
+	| ((rt) << 12) | ((rt2) << 16))
+
 /* Move to coprocessor from ARM register
  * cp: Coprocessor number
  * op1: Coprocessor opcode
@@ -209,6 +209,17 @@
 #define ARMV4_5_MCR(cp, op1, rd, crn, crm, op2) \
 	(0xee000010 | (crm) | ((op2) << 5) | ((cp) << 8) \
 	| ((rd) << 12) | ((crn) << 16) | ((op1) << 21))
+
+/* Move to coprocessor from two ARM registers
+ * cp: Coprocessor number
+ * op: Coprocessor opcode
+ * rt: destination register 1
+ * rt2: destination register 2
+ * crm: coprocessor source register
+ */
+#define ARMV5_T_MCRR(cp, op, rt, rt2, crm) \
+	(0xec400000 | (crm) | ((op) << 4) | ((cp) << 8) \
+	 | ((rt) << 12) | ((rt2) << 16))
 
 /* Breakpoint instruction (ARMv5)
  * im: 16-bit immediate

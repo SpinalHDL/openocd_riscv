@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
 *   Copyright (C) 2007 by Pavel Chromy                                    *
 *   chromy@asix.cz                                                        *
-*                                                                         *
-*   This program is free software; you can redistribute it and/or modify  *
-*   it under the terms of the GNU General Public License as published by  *
-*   the Free Software Foundation; either version 2 of the License, or     *
-*   (at your option) any later version.                                   *
-*                                                                         *
-*   This program is distributed in the hope that it will be useful,       *
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
-*   GNU General Public License for more details.                          *
-*                                                                         *
-*   You should have received a copy of the GNU General Public License     *
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
 ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -214,11 +203,11 @@ static void bitq_scan(struct scan_command *cmd)
 	bitq_scan_field(&cmd->fields[i], 1);
 }
 
-int bitq_execute_queue(void)
+int bitq_execute_queue(struct jtag_command *cmd_queue)
 {
-	struct jtag_command *cmd = jtag_command_queue; /* currently processed command */
+	struct jtag_command *cmd = cmd_queue; /* currently processed command */
 
-	bitq_in_state.cmd = jtag_command_queue;
+	bitq_in_state.cmd = cmd_queue;
 	bitq_in_state.field_idx = 0;
 	bitq_in_state.bit_pos   = 0;
 	bitq_in_state.status    = ERROR_OK;

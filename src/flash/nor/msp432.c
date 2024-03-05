@@ -1,18 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2018 by Texas Instruments, Inc.                         *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -54,6 +43,21 @@ struct msp432_bank {
 	bool unlock_bsl;
 	struct working_area *working_area;
 	struct armv7m_algorithm armv7m_info;
+};
+
+/* Flash helper algorithm for MSP432P401x targets */
+static const uint8_t msp432p401x_algo[] = {
+#include "../../../contrib/loaders/flash/msp432/msp432p401x_algo.inc"
+};
+
+/* Flash helper algorithm for MSP432P411x targets */
+static const uint8_t msp432p411x_algo[] = {
+#include "../../../contrib/loaders/flash/msp432/msp432p411x_algo.inc"
+};
+
+/* Flash helper algorithm for MSP432E4x targets */
+static const uint8_t msp432e4x_algo[] = {
+#include "../../../contrib/loaders/flash/msp432/msp432e4x_algo.inc"
 };
 
 static int msp432_auto_probe(struct flash_bank *bank);
@@ -371,7 +375,7 @@ static int msp432_init(struct flash_bank *bank)
 	buf_set_u32(reg_params[0].value, 0, 32, ALGO_STACK_POINTER_ADDR);
 
 	/* Begin executing the flash helper algorithm */
-	retval = target_start_algorithm(target, 0, 0, 1, reg_params,
+	retval = target_start_algorithm(target, 0, NULL, 1, reg_params,
 				algo_entry_addr, 0, &msp432_bank->armv7m_info);
 	destroy_reg_param(&reg_params[0]);
 	if (retval != ERROR_OK) {

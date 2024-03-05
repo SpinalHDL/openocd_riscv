@@ -1,18 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /*
  * Copyright (C) 2009 by David Brownell
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -74,6 +63,29 @@ static int dpm_mrc(struct target *target, int cpnum,
 	return retval;
 }
 
+static int dpm_mrrc(struct target *target, int cpnum,
+	uint32_t op, uint32_t crm, uint64_t *value)
+{
+	struct arm *arm = target_to_arm(target);
+	struct arm_dpm *dpm = arm->dpm;
+	int retval;
+
+	retval = dpm->prepare(dpm);
+	if (retval != ERROR_OK)
+		return retval;
+
+	LOG_DEBUG("MRRC p%d, %d, r0, r1, c%d", cpnum,
+		 (int)op, (int)crm);
+
+	/* read coprocessor register into R0, R1; return via DCC */
+	retval = dpm->instr_read_data_r0_r1(dpm,
+			ARMV5_T_MRRC(cpnum, op, 0, 1, crm),
+			value);
+
+	/* (void) */ dpm->finish(dpm);
+	return retval;
+}
+
 static int dpm_mcr(struct target *target, int cpnum,
 	uint32_t op1, uint32_t op2, uint32_t crn, uint32_t crm,
 	uint32_t value)
@@ -96,6 +108,29 @@ static int dpm_mcr(struct target *target, int cpnum,
 			value);
 
 	/* (void) */ dpm->finish(dpm);
+	return retval;
+}
+
+static int dpm_mcrr(struct target *target, int cpnum,
+	uint32_t op, uint32_t crm, uint64_t value)
+{
+	struct arm *arm = target_to_arm(target);
+	struct arm_dpm *dpm = arm->dpm;
+	int retval;
+
+	retval = dpm->prepare(dpm);
+	if (retval != ERROR_OK)
+		return retval;
+
+	LOG_DEBUG("MCRR p%d, %d, r0, r1, c%d", cpnum,
+		(int)op, (int)crm);
+
+	/* read DCC into r0, r1; then write coprocessor register from R0, R1 */
+	retval = dpm->instr_write_data_r0_r1(dpm,
+			ARMV5_T_MCRR(cpnum, op, 0, 1, crm), value);
+
+	/* (void) */ dpm->finish(dpm);
+
 	return retval;
 }
 
@@ -929,7 +964,7 @@ static int dpm_watchpoint_setup(struct arm_dpm *dpm, unsigned index_t,
 	uint32_t control;
 
 	/* this hardware doesn't support data value matching or masking */
-	if (wp->value || wp->mask != ~(uint32_t)0) {
+	if (wp->mask != WATCHPOINT_IGNORE_DATA_VALUE_MASK) {
 		LOG_DEBUG("watchpoint values and masking not supported");
 		return ERROR_TARGET_RESOURCE_NOT_AVAILABLE;
 	}
@@ -1061,7 +1096,7 @@ int arm_dpm_setup(struct arm_dpm *dpm)
 {
 	struct arm *arm = dpm->arm;
 	struct target *target = arm->target;
-	struct reg_cache *cache = 0;
+	struct reg_cache *cache = NULL;
 
 	arm->dpm = dpm;
 
@@ -1081,6 +1116,8 @@ int arm_dpm_setup(struct arm_dpm *dpm)
 	/* coprocessor access setup */
 	arm->mrc = dpm_mrc;
 	arm->mcr = dpm_mcr;
+	arm->mrrc = dpm_mrrc;
+	arm->mcrr = dpm_mcrr;
 
 	/* breakpoint setup -- optional until it works everywhere */
 	if (!target->type->add_breakpoint) {

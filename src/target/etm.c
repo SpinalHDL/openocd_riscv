@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -563,8 +552,8 @@ static int etm_set_reg(struct reg *reg, uint32_t value)
 	}
 
 	buf_set_u32(reg->value, 0, reg->size, value);
-	reg->valid = 1;
-	reg->dirty = 0;
+	reg->valid = true;
+	reg->dirty = false;
 
 	return ERROR_OK;
 }
@@ -1717,7 +1706,7 @@ COMMAND_HANDLER(handle_etm_dump_command)
 		return ERROR_FAIL;
 	}
 
-	if (etm_ctx->capture_driver->status == TRACE_IDLE) {
+	if (etm_ctx->capture_driver->status(etm_ctx) == TRACE_IDLE) {
 		command_print(CMD, "trace capture wasn't enabled, no trace data captured");
 		return ERROR_OK;
 	}

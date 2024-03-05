@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2008 digenius technology GmbH.                          *
  *   Michael Bruck                                                         *
@@ -7,19 +9,6 @@
  *   Copyright (C) 2008 Georg Acher <acher@in.tum.de>                      *
  *                                                                         *
  *   Copyright (C) 2009 David Brownell                                     *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -460,7 +449,7 @@ static int arm11_resume(struct target *target, int current,
 
 
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -562,7 +551,7 @@ static int arm11_step(struct target *target, int current,
 		target_state_name(target));
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target was not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -809,7 +798,7 @@ static int arm11_read_memory_inner(struct target *target,
 	int retval;
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target was not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -907,7 +896,7 @@ static int arm11_write_memory_inner(struct target *target,
 	int retval;
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target was not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 

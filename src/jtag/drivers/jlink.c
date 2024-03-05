@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2007 by Juergen Stuber <juergen@jstuber.net>            *
  *   based on Dominic Rath's and Benedikt Sauter's usbprog.c               *
@@ -13,19 +15,6 @@
  *                                                                         *
  *   Copyright (C) 2015 by Paul Fertser                                    *
  *   fercerpav@gmail.com                                                   *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -287,10 +276,10 @@ static int jlink_execute_command(struct jtag_command *cmd)
 	return ERROR_OK;
 }
 
-static int jlink_execute_queue(void)
+static int jlink_execute_queue(struct jtag_command *cmd_queue)
 {
 	int ret;
-	struct jtag_command *cmd = jtag_command_queue;
+	struct jtag_command *cmd = cmd_queue;
 
 	while (cmd) {
 		ret = jlink_execute_command(cmd);
@@ -977,19 +966,17 @@ COMMAND_HANDLER(jlink_usb_command)
 {
 	int tmp;
 
-	if (CMD_ARGC != 1) {
-		command_print(CMD, "Need exactly one argument for jlink usb");
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
 
 	if (sscanf(CMD_ARGV[0], "%i", &tmp) != 1) {
 		command_print(CMD, "Invalid USB address: %s", CMD_ARGV[0]);
-		return ERROR_FAIL;
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
 
 	if (tmp < JAYLINK_USB_ADDRESS_0 || tmp > JAYLINK_USB_ADDRESS_3) {
 		command_print(CMD, "Invalid USB address: %s", CMD_ARGV[0]);
-		return ERROR_FAIL;
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
 
 	usb_address = tmp;
@@ -1070,7 +1057,7 @@ COMMAND_HANDLER(jlink_handle_jlink_jtag_command)
 	} else if (CMD_ARGC == 1) {
 		if (sscanf(CMD_ARGV[0], "%i", &tmp) != 1) {
 			command_print(CMD, "Invalid argument: %s", CMD_ARGV[0]);
-			return ERROR_COMMAND_SYNTAX_ERROR;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		switch (tmp) {
@@ -1082,10 +1069,9 @@ COMMAND_HANDLER(jlink_handle_jlink_jtag_command)
 				break;
 			default:
 				command_print(CMD, "Invalid argument: %s", CMD_ARGV[0]);
-				return ERROR_COMMAND_SYNTAX_ERROR;
+				return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 	} else {
-		command_print(CMD, "Need exactly one argument for jlink jtag");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -1097,10 +1083,8 @@ COMMAND_HANDLER(jlink_handle_target_power_command)
 	int ret;
 	int enable;
 
-	if (CMD_ARGC != 1) {
-		command_print(CMD, "Need exactly one argument for jlink targetpower");
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
 
 	if (!jaylink_has_cap(caps, JAYLINK_DEV_CAP_SET_TARGET_POWER)) {
 		command_print(CMD, "Target power supply is not supported by the "
@@ -1439,17 +1423,16 @@ COMMAND_HANDLER(jlink_handle_config_usb_address_command)
 	} else if (CMD_ARGC == 1) {
 		if (sscanf(CMD_ARGV[0], "%" SCNd8, &tmp) != 1) {
 			command_print(CMD, "Invalid USB address: %s", CMD_ARGV[0]);
-			return ERROR_FAIL;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		if (tmp > JAYLINK_USB_ADDRESS_3) {
 			command_print(CMD, "Invalid USB address: %u", tmp);
-			return ERROR_FAIL;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		tmp_config.usb_address = tmp;
 	} else {
-		command_print(CMD, "Need exactly one argument for jlink config usb");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -1481,13 +1464,11 @@ COMMAND_HANDLER(jlink_handle_config_target_power_command)
 			enable = false;
 		} else {
 			command_print(CMD, "Invalid argument: %s", CMD_ARGV[0]);
-			return ERROR_FAIL;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		tmp_config.target_power = enable;
 	} else {
-		command_print(CMD, "Need exactly one argument for jlink config "
-			"targetpower");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -1521,7 +1502,7 @@ COMMAND_HANDLER(jlink_handle_config_mac_address_command)
 		if ((strlen(str) != 17) || (str[2] != ':' || str[5] != ':' ||
 				str[8] != ':' || str[11] != ':' || str[14] != ':')) {
 			command_print(CMD, "Invalid MAC address format");
-			return ERROR_COMMAND_SYNTAX_ERROR;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		for (i = 5; i >= 0; i--) {
@@ -1531,17 +1512,16 @@ COMMAND_HANDLER(jlink_handle_config_mac_address_command)
 
 		if (!(addr[0] | addr[1] | addr[2] | addr[3] | addr[4] | addr[5])) {
 			command_print(CMD, "Invalid MAC address: zero address");
-			return ERROR_COMMAND_SYNTAX_ERROR;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		if (!(0x01 & addr[0])) {
 			command_print(CMD, "Invalid MAC address: multicast address");
-			return ERROR_COMMAND_SYNTAX_ERROR;
+			return ERROR_COMMAND_ARGUMENT_INVALID;
 		}
 
 		memcpy(tmp_config.mac_address, addr, sizeof(addr));
 	} else {
-		command_print(CMD, "Need exactly one argument for jlink config mac");
 		return ERROR_COMMAND_SYNTAX_ERROR;
 	}
 
@@ -1603,20 +1583,26 @@ COMMAND_HANDLER(jlink_handle_config_ip_address_command)
 	if (!CMD_ARGC) {
 		show_config_ip_address(CMD);
 	} else {
-		if (!string_to_ip(CMD_ARGV[0], ip_address, &i))
-			return ERROR_COMMAND_SYNTAX_ERROR;
+		if (!string_to_ip(CMD_ARGV[0], ip_address, &i)) {
+			command_print(CMD, "invalid IPv4 address");
+			return ERROR_COMMAND_ARGUMENT_INVALID;
+		}
 
 		len = strlen(CMD_ARGV[0]);
 
 		/* Check for format A.B.C.D/E. */
 		if (i < len) {
-			if (CMD_ARGV[0][i] != '/')
-				return ERROR_COMMAND_SYNTAX_ERROR;
+			if (CMD_ARGV[0][i] != '/') {
+				command_print(CMD, "missing network mask");
+				return ERROR_COMMAND_ARGUMENT_INVALID;
+			}
 
 			COMMAND_PARSE_NUMBER(u8, CMD_ARGV[0] + i + 1, subnet_bits);
 		} else if (CMD_ARGC > 1) {
-			if (!string_to_ip(CMD_ARGV[1], (uint8_t *)&subnet_mask, &i))
-				return ERROR_COMMAND_SYNTAX_ERROR;
+			if (!string_to_ip(CMD_ARGV[1], (uint8_t *)&subnet_mask, &i)) {
+				command_print(CMD, "invalid subnet mask");
+				return ERROR_COMMAND_ARGUMENT_INVALID;
+			}
 		}
 
 		if (!subnet_mask)
@@ -1987,6 +1973,8 @@ struct pending_scan_result {
 	void *buffer;
 	/** Offset in the destination buffer */
 	unsigned buffer_offset;
+	/** SWD command */
+	uint8_t swd_cmd;
 };
 
 #define MAX_PENDING_SCAN_RESULTS 256
@@ -2120,7 +2108,7 @@ static int jlink_swd_switch_seq(enum swd_special_seq seq)
 
 	switch (seq) {
 		case LINE_RESET:
-			LOG_DEBUG("SWD line reset");
+			LOG_DEBUG_IO("SWD line reset");
 			s = swd_seq_line_reset;
 			s_len = swd_seq_line_reset_len;
 			break;
@@ -2169,7 +2157,7 @@ static int jlink_swd_run_queue(void)
 	int i;
 	int ret;
 
-	LOG_DEBUG("Executing %d queued transactions", pending_scan_results_length);
+	LOG_DEBUG_IO("Executing %d queued transactions", pending_scan_results_length);
 
 	if (queued_retval != ERROR_OK) {
 		LOG_DEBUG("Skipping due to previous errors: %d", queued_retval);
@@ -2190,12 +2178,13 @@ static int jlink_swd_run_queue(void)
 	}
 
 	for (i = 0; i < pending_scan_results_length; i++) {
+		/* Devices do not reply to DP_TARGETSEL write cmd, ignore received ack */
+		bool check_ack = swd_cmd_returns_ack(pending_scan_results_buffer[i].swd_cmd);
 		int ack = buf_get_u32(tdo_buffer, pending_scan_results_buffer[i].first, 3);
-
-		if (ack != SWD_ACK_OK) {
+		if (check_ack && ack != SWD_ACK_OK) {
 			LOG_DEBUG("SWD ack not OK: %d %s", ack,
 				  ack == SWD_ACK_WAIT ? "WAIT" : ack == SWD_ACK_FAULT ? "FAULT" : "JUNK");
-			queued_retval = ack == SWD_ACK_WAIT ? ERROR_WAIT : ERROR_FAIL;
+			queued_retval = swd_ack_to_error_code(ack);
 			goto skip;
 		} else if (pending_scan_results_buffer[i].length) {
 			uint32_t data = buf_get_u32(tdo_buffer, 3 + pending_scan_results_buffer[i].first, 32);
@@ -2232,6 +2221,7 @@ static void jlink_swd_queue_cmd(uint8_t cmd, uint32_t *dst, uint32_t data, uint3
 	if (queued_retval != ERROR_OK)
 		return;
 
+	pending_scan_results_buffer[pending_scan_results_length].swd_cmd = cmd;
 	cmd |= SWD_CMD_START | SWD_CMD_PARK;
 
 	jlink_queue_data_out(&cmd, 8);

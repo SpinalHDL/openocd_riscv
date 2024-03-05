@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2008 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
@@ -5,19 +7,6 @@
  *   Copyright (C) 2008 by David T.L. Wong                                 *
  *                                                                         *
  *   Copyright (C) 2009 by David N. Claffey <dnclaffey@gmail.com>          *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -58,7 +47,7 @@ int mips_ejtag_get_idcode(struct mips_ejtag *ejtag_info)
 	return mips_ejtag_drscan_32(ejtag_info, &ejtag_info->idcode);
 }
 
-static int mips_ejtag_get_impcode(struct mips_ejtag *ejtag_info)
+int mips_ejtag_get_impcode(struct mips_ejtag *ejtag_info)
 {
 	mips_ejtag_set_instr(ejtag_info, EJTAG_INST_IMPCODE);
 
@@ -270,9 +259,12 @@ int mips_ejtag_exit_debug(struct mips_ejtag *ejtag_info)
 {
 	struct pa_list pracc_list = {.instr = MIPS32_DRET(ejtag_info->isa), .addr = 0};
 	struct pracc_queue_info ctx = {.max_code = 1, .pracc_list = &pracc_list, .code_count = 1, .store_count = 0};
+	struct mips32_common *mips32 = container_of(ejtag_info,
+					     struct mips32_common, ejtag_info);
 
 	/* execute our dret instruction */
-	ctx.retval = mips32_pracc_queue_exec(ejtag_info, &ctx, NULL, 0); /* shift out instr, omit last check */
+	ctx.retval = mips32_pracc_queue_exec(ejtag_info, &ctx, NULL,
+				      mips32->cpu_quirks & EJTAG_QUIRK_PAD_DRET);
 
 	/* pic32mx workaround, false pending at low core clock */
 	jtag_add_sleep(1000);
@@ -340,7 +332,7 @@ static void ejtag_v26_print_imp(struct mips_ejtag *ejtag_info)
 		EJTAG_IMP_HAS(EJTAG_V26_IMP_DINT) ? " DINT" : "");
 }
 
-static void ejtag_main_print_imp(struct mips_ejtag *ejtag_info)
+void ejtag_main_print_imp(struct mips_ejtag *ejtag_info)
 {
 	LOG_DEBUG("EJTAG main: features:%s%s%s%s%s",
 		EJTAG_IMP_HAS(EJTAG_IMP_ASID8) ? " ASID_8" : "",

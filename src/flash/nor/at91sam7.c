@@ -1,21 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2006 by Magnus Lundin                                   *
  *   lundin@mlu.mine.nu                                                    *
  *                                                                         *
  *   Copyright (C) 2008 by Gheorghe Guran (atlas)                          *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
 ****************************************************************************/
 
 /***************************************************************************
@@ -571,12 +560,22 @@ static int at91sam7_read_part_info(struct flash_bank *bank)
 		if (bnk > 0) {
 			if (!t_bank->next) {
 				/* create a new flash bank element */
-				struct flash_bank *fb = malloc(sizeof(struct flash_bank));
+				struct flash_bank *fb = calloc(sizeof(struct flash_bank), 1);
+				if (!fb) {
+					LOG_ERROR("No memory for flash bank");
+					return ERROR_FAIL;
+				}
 				fb->target = target;
 				fb->driver = bank->driver;
+				fb->default_padded_value = 0xff;
+				fb->erased_value = 0xff;
 				fb->driver_priv = malloc(sizeof(struct at91sam7_flash_bank));
-				fb->name = "sam7_probed";
-				fb->next = NULL;
+				if (!fb->driver_priv) {
+					free(fb);
+					LOG_ERROR("No memory for flash driver priv");
+					return ERROR_FAIL;
+				}
+				fb->name = strdup("sam7_probed");
 
 				/* link created bank in 'flash_banks' list */
 				t_bank->next = fb;
@@ -587,8 +586,6 @@ static int at91sam7_read_part_info(struct flash_bank *bank)
 		t_bank->bank_number = bnk;
 		t_bank->base = base_address + bnk * bank_size;
 		t_bank->size = bank_size;
-		t_bank->chip_width = 0;
-		t_bank->bus_width = 4;
 		t_bank->num_sectors = sectors_num;
 
 		/* allocate sectors */
@@ -702,8 +699,6 @@ FLASH_BANK_COMMAND_HANDLER(at91sam7_flash_bank_command)
 	uint32_t bank_size;
 	uint32_t ext_freq = 0;
 
-	unsigned int chip_width;
-	unsigned int bus_width;
 	unsigned int banks_num;
 	unsigned int num_sectors;
 
@@ -727,9 +722,6 @@ FLASH_BANK_COMMAND_HANDLER(at91sam7_flash_bank_command)
 
 	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], base_address);
 
-	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[3], chip_width);
-	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[4], bus_width);
-
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[8], banks_num);
 	COMMAND_PARSE_NUMBER(uint, CMD_ARGV[9], num_sectors);
 	COMMAND_PARSE_NUMBER(u16, CMD_ARGV[10], pages_per_sector);
@@ -743,7 +735,7 @@ FLASH_BANK_COMMAND_HANDLER(at91sam7_flash_bank_command)
 		at91sam7_info->ext_freq = ext_freq;
 	}
 
-	if ((bus_width == 0) || (banks_num == 0) || (num_sectors == 0) ||
+	if ((banks_num == 0) || (num_sectors == 0) ||
 			(pages_per_sector == 0) || (page_size == 0) || (num_nvmbits == 0)) {
 		at91sam7_info->flash_autodetection = 1;
 		return ERROR_OK;
@@ -756,12 +748,22 @@ FLASH_BANK_COMMAND_HANDLER(at91sam7_flash_bank_command)
 		if (bnk > 0) {
 			if (!t_bank->next) {
 				/* create a new bank element */
-				struct flash_bank *fb = malloc(sizeof(struct flash_bank));
+				struct flash_bank *fb = calloc(sizeof(struct flash_bank), 1);
+				if (!fb) {
+					LOG_ERROR("No memory for flash bank");
+					return ERROR_FAIL;
+				}
 				fb->target = target;
 				fb->driver = bank->driver;
+				fb->default_padded_value = 0xff;
+				fb->erased_value = 0xff;
 				fb->driver_priv = malloc(sizeof(struct at91sam7_flash_bank));
-				fb->name = "sam7_probed";
-				fb->next = NULL;
+				if (!fb->driver_priv) {
+					free(fb);
+					LOG_ERROR("No memory for flash driver priv");
+					return ERROR_FAIL;
+				}
+				fb->name = strdup("sam7_probed");
 
 				/* link created bank in 'flash_banks' list */
 				t_bank->next = fb;
@@ -772,8 +774,6 @@ FLASH_BANK_COMMAND_HANDLER(at91sam7_flash_bank_command)
 		t_bank->bank_number = bnk;
 		t_bank->base = base_address + bnk * bank_size;
 		t_bank->size = bank_size;
-		t_bank->chip_width = chip_width;
-		t_bank->bus_width = bus_width;
 		t_bank->num_sectors = num_sectors;
 
 		/* allocate sectors */

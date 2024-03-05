@@ -433,7 +433,7 @@ static const struct command_registration vexriscv_nor_spi_command_handlers[] = {
 };
 
 
-struct flash_driver vexriscv_nor_spi = {
+const struct flash_driver vexriscv_nor_spi = {
 	.name = "vexriscv_nor_spi",
 	.commands = vexriscv_nor_spi_command_handlers,
 	.flash_bank_command = vexriscv_nor_spi_flash_bank_command,

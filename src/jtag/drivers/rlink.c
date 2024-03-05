@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2008 Rob Brown, Lou Deluxe                              *
  *   rob@cobbleware.com, lou.openocd012@fixit.nospammail.net               *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -643,7 +632,7 @@ static int dtc_queue_run(void)
 	uint8_t dtc_mask, tdo_mask;
 	uint8_t reply_buffer[USB_EP2IN_SIZE];
 
-	assert((dtc_queue.rq_head != 0) == (dtc_queue.reply_index > 0));
+	assert((!!dtc_queue.rq_head) == (dtc_queue.reply_index > 0));
 	assert(dtc_queue.cmd_index < USB_EP2BANK_SIZE);
 	assert(dtc_queue.reply_index <= USB_EP2IN_SIZE);
 
@@ -1273,9 +1262,9 @@ static int rlink_scan(struct jtag_command *cmd, enum scan_type type,
 	return 0;
 }
 
-static int rlink_execute_queue(void)
+static int rlink_execute_queue(struct jtag_command *cmd_queue)
 {
-	struct jtag_command *cmd = jtag_command_queue;	/* currently processed command */
+	struct jtag_command *cmd = cmd_queue;	/* currently processed command */
 	int scan_size;
 	enum scan_type type;
 	uint8_t *buffer;
@@ -1459,7 +1448,7 @@ static int rlink_init(void)
 
 	const uint16_t vids[] = { USB_IDVENDOR, 0 };
 	const uint16_t pids[] = { USB_IDPRODUCT, 0 };
-	if (jtag_libusb_open(vids, pids, &hdev, NULL) != ERROR_OK)
+	if (jtag_libusb_open(vids, pids, NULL, &hdev, NULL) != ERROR_OK)
 		return ERROR_FAIL;
 
 	struct libusb_device_descriptor descriptor;

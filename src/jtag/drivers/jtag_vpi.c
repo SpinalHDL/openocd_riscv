@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /*
  * JTAG to VPI driver
  *
@@ -5,19 +7,6 @@
  *
  * See file CREDITS for list of people who contributed to this
  * project.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -491,12 +480,12 @@ static int jtag_vpi_stableclocks(int cycles)
 	return ERROR_OK;
 }
 
-static int jtag_vpi_execute_queue(void)
+static int jtag_vpi_execute_queue(struct jtag_command *cmd_queue)
 {
 	struct jtag_command *cmd;
 	int retval = ERROR_OK;
 
-	for (cmd = jtag_command_queue; retval == ERROR_OK && cmd;
+	for (cmd = cmd_queue; retval == ERROR_OK && cmd;
 	     cmd = cmd->next) {
 		switch (cmd->type) {
 		case JTAG_RESET:
@@ -604,10 +593,8 @@ static int jtag_vpi_quit(void)
 
 COMMAND_HANDLER(jtag_vpi_set_port)
 {
-	if (CMD_ARGC == 0) {
-		LOG_ERROR("Command \"jtag_vpi set_port\" expects 1 argument (TCP port number)");
+	if (CMD_ARGC == 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
 
 	COMMAND_PARSE_NUMBER(int, CMD_ARGV[0], server_port);
 	LOG_INFO("jtag_vpi: server port set to %u", server_port);
@@ -618,10 +605,8 @@ COMMAND_HANDLER(jtag_vpi_set_port)
 COMMAND_HANDLER(jtag_vpi_set_address)
 {
 
-	if (CMD_ARGC == 0) {
-		LOG_ERROR("Command \"jtag_vpi set_address\" expects 1 argument (IP address)");
+	if (CMD_ARGC == 0)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
 
 	free(server_address);
 	server_address = strdup(CMD_ARGV[0]);
@@ -632,10 +617,8 @@ COMMAND_HANDLER(jtag_vpi_set_address)
 
 COMMAND_HANDLER(jtag_vpi_stop_sim_on_exit_handler)
 {
-	if (CMD_ARGC != 1) {
-		LOG_ERROR("Command \"jtag_vpi stop_sim_on_exit\" expects 1 argument (on|off)");
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
 
 	COMMAND_PARSE_ON_OFF(CMD_ARGV[0], stop_sim_on_exit);
 	return ERROR_OK;

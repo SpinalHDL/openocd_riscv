@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2018 by Mickaël Thomas                                  *
  *   mickael9@gmail.com                                                    *
@@ -16,19 +18,6 @@
  *                                                                         *
  *   Copyright (C) 2013 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -39,8 +28,23 @@
 #include <libusb.h>
 #include <helper/log.h>
 #include <helper/replacements.h>
+#include <jtag/jtag.h>	/* ERROR_JTAG_DEVICE_ERROR only */
 
 #include "cmsis_dap.h"
+#include "libusb_helper.h"
+
+enum {
+	CMSIS_DAP_TRANSFER_PENDING = 0,	/* must be 0, used in libusb_handle_events_completed */
+	CMSIS_DAP_TRANSFER_IDLE,
+	CMSIS_DAP_TRANSFER_COMPLETED
+};
+
+struct cmsis_dap_bulk_transfer {
+	struct libusb_transfer *transfer;
+	uint8_t *buffer;
+	int status;		/* either CMSIS_DAP_TRANSFER_ enum or error code */
+	int transferred;
+};
 
 struct cmsis_dap_backend_data {
 	struct libusb_context *usb_ctx;
@@ -48,12 +52,16 @@ struct cmsis_dap_backend_data {
 	unsigned int ep_out;
 	unsigned int ep_in;
 	int interface;
+
+	struct cmsis_dap_bulk_transfer command_transfers[MAX_PENDING_REQUESTS];
+	struct cmsis_dap_bulk_transfer response_transfers[MAX_PENDING_REQUESTS];
 };
 
 static int cmsis_dap_usb_interface = -1;
 
 static void cmsis_dap_usb_close(struct cmsis_dap *dap);
 static int cmsis_dap_usb_alloc(struct cmsis_dap *dap, unsigned int pkt_sz);
+static void cmsis_dap_usb_free(struct cmsis_dap *dap);
 
 static int cmsis_dap_usb_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t pids[], const char *serial)
 {
@@ -273,8 +281,10 @@ static int cmsis_dap_usb_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t p
 					/* If the interface is reliably identified
 					 * then we need not insist on setting USB class, subclass and protocol
 					 * exactly as the specification requires.
+					 * Just filter out the well known classes, mainly CDC and MSC.
 					 * At least KitProg3 uses class 0 contrary to the specification */
-					if (intf_identified_reliably) {
+					if (intf_identified_reliably &&
+							(intf_desc->bInterfaceClass == 0 || intf_desc->bInterfaceClass > 0x12)) {
 						LOG_WARNING("Using CMSIS-DAPv2 interface %d with wrong class %" PRId8
 								  " subclass %" PRId8 " or protocol %" PRId8,
 								  interface_num,
@@ -352,7 +362,7 @@ static int cmsis_dap_usb_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t p
 			if (err)
 				LOG_WARNING("could not claim interface: %s", libusb_strerror(err));
 
-			dap->bdata = malloc(sizeof(struct cmsis_dap_backend_data));
+			dap->bdata = calloc(1, sizeof(struct cmsis_dap_backend_data));
 			if (!dap->bdata) {
 				LOG_ERROR("unable to allocate memory");
 				libusb_release_interface(dev_handle, interface_num);
@@ -361,25 +371,35 @@ static int cmsis_dap_usb_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t p
 				return ERROR_FAIL;
 			}
 
-			dap->packet_size = packet_size;
-			dap->packet_buffer_size = packet_size;
 			dap->bdata->usb_ctx = ctx;
 			dap->bdata->dev_handle = dev_handle;
 			dap->bdata->ep_out = ep_out;
 			dap->bdata->ep_in = ep_in;
 			dap->bdata->interface = interface_num;
 
-			dap->packet_buffer = malloc(dap->packet_buffer_size);
-			if (!dap->packet_buffer) {
-				LOG_ERROR("unable to allocate memory");
-				cmsis_dap_usb_close(dap);
-				return ERROR_FAIL;
+			for (unsigned int idx = 0; idx < MAX_PENDING_REQUESTS; idx++) {
+				dap->bdata->command_transfers[idx].status = CMSIS_DAP_TRANSFER_IDLE;
+				dap->bdata->command_transfers[idx].transfer = libusb_alloc_transfer(0);
+				if (!dap->bdata->command_transfers[idx].transfer) {
+					LOG_ERROR("unable to allocate USB transfer");
+					cmsis_dap_usb_close(dap);
+					return ERROR_FAIL;
+				}
+
+				dap->bdata->response_transfers[idx].status = CMSIS_DAP_TRANSFER_IDLE;
+				dap->bdata->response_transfers[idx].transfer = libusb_alloc_transfer(0);
+				if (!dap->bdata->response_transfers[idx].transfer) {
+					LOG_ERROR("unable to allocate USB transfer");
+					cmsis_dap_usb_close(dap);
+					return ERROR_FAIL;
+				}
 			}
 
-			dap->command = dap->packet_buffer;
-			dap->response = dap->packet_buffer;
+			err = cmsis_dap_usb_alloc(dap, packet_size);
+			if (err != ERROR_OK)
+				cmsis_dap_usb_close(dap);
 
-			return ERROR_OK;
+			return err;
 		}
 
 		libusb_close(dev_handle);
@@ -393,72 +413,233 @@ static int cmsis_dap_usb_open(struct cmsis_dap *dap, uint16_t vids[], uint16_t p
 
 static void cmsis_dap_usb_close(struct cmsis_dap *dap)
 {
+	for (unsigned int i = 0; i < MAX_PENDING_REQUESTS; i++) {
+		libusb_free_transfer(dap->bdata->command_transfers[i].transfer);
+		libusb_free_transfer(dap->bdata->response_transfers[i].transfer);
+	}
+	cmsis_dap_usb_free(dap);
 	libusb_release_interface(dap->bdata->dev_handle, dap->bdata->interface);
 	libusb_close(dap->bdata->dev_handle);
 	libusb_exit(dap->bdata->usb_ctx);
 	free(dap->bdata);
 	dap->bdata = NULL;
-	free(dap->packet_buffer);
-	dap->packet_buffer = NULL;
 }
 
-static int cmsis_dap_usb_read(struct cmsis_dap *dap, int timeout_ms)
+static void LIBUSB_CALL cmsis_dap_usb_callback(struct libusb_transfer *transfer)
+{
+	struct cmsis_dap_bulk_transfer *tr;
+
+	tr = (struct cmsis_dap_bulk_transfer *)transfer->user_data;
+	if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
+		tr->status = CMSIS_DAP_TRANSFER_COMPLETED;
+		tr->transferred = transfer->actual_length;
+	} else if (transfer->status == LIBUSB_TRANSFER_TIMED_OUT) {
+		tr->status = ERROR_TIMEOUT_REACHED;
+	} else {
+		tr->status = ERROR_JTAG_DEVICE_ERROR;
+	}
+}
+
+static int cmsis_dap_usb_read(struct cmsis_dap *dap, int transfer_timeout_ms,
+							  struct timeval *wait_timeout)
 {
 	int transferred = 0;
 	int err;
+	struct cmsis_dap_bulk_transfer *tr;
+	tr = &dap->bdata->response_transfers[dap->pending_fifo_get_idx];
 
-	err = libusb_bulk_transfer(dap->bdata->dev_handle, dap->bdata->ep_in,
-							dap->packet_buffer, dap->packet_size, &transferred, timeout_ms);
-	if (err) {
-		if (err == LIBUSB_ERROR_TIMEOUT) {
-			return ERROR_TIMEOUT_REACHED;
-		} else {
-			LOG_ERROR("error reading data: %s", libusb_strerror(err));
+	if (tr->status == CMSIS_DAP_TRANSFER_IDLE) {
+		libusb_fill_bulk_transfer(tr->transfer,
+								  dap->bdata->dev_handle, dap->bdata->ep_in,
+								  tr->buffer, dap->packet_size,
+								  &cmsis_dap_usb_callback, tr,
+								  transfer_timeout_ms);
+		LOG_DEBUG_IO("submit read @ %u", dap->pending_fifo_get_idx);
+		tr->status = CMSIS_DAP_TRANSFER_PENDING;
+		err = libusb_submit_transfer(tr->transfer);
+		if (err) {
+			tr->status = CMSIS_DAP_TRANSFER_IDLE;
+			LOG_ERROR("error submitting USB read: %s", libusb_strerror(err));
 			return ERROR_FAIL;
 		}
 	}
 
-	memset(&dap->packet_buffer[transferred], 0, dap->packet_buffer_size - transferred);
+	struct timeval tv = {
+		.tv_sec = transfer_timeout_ms / 1000,
+		.tv_usec = transfer_timeout_ms % 1000 * 1000
+	};
+
+	while (tr->status == CMSIS_DAP_TRANSFER_PENDING) {
+		err = libusb_handle_events_timeout_completed(dap->bdata->usb_ctx,
+												 wait_timeout ? wait_timeout : &tv,
+												 &tr->status);
+		if (err) {
+			LOG_ERROR("error handling USB events: %s", libusb_strerror(err));
+			return ERROR_FAIL;
+		}
+		if (wait_timeout)
+			break;
+	}
+
+	if (tr->status < 0 || tr->status == CMSIS_DAP_TRANSFER_COMPLETED) {
+		/* Check related command request for an error */
+		struct cmsis_dap_bulk_transfer *tr_cmd;
+		tr_cmd = &dap->bdata->command_transfers[dap->pending_fifo_get_idx];
+		if (tr_cmd->status < 0) {
+			err = tr_cmd->status;
+			tr_cmd->status = CMSIS_DAP_TRANSFER_IDLE;
+			if (err != ERROR_TIMEOUT_REACHED)
+				LOG_ERROR("error writing USB data");
+			else
+				LOG_DEBUG("command write USB timeout @ %u", dap->pending_fifo_get_idx);
+
+			return err;
+		}
+		if (tr_cmd->status == CMSIS_DAP_TRANSFER_COMPLETED)
+			tr_cmd->status = CMSIS_DAP_TRANSFER_IDLE;
+	}
+
+	if (tr->status < 0) {
+		err = tr->status;
+		tr->status = CMSIS_DAP_TRANSFER_IDLE;
+		if (err != ERROR_TIMEOUT_REACHED)
+			LOG_ERROR("error reading USB data");
+		else
+			LOG_DEBUG("USB timeout @ %u", dap->pending_fifo_get_idx);
+
+		return err;
+	}
+
+	if (tr->status == CMSIS_DAP_TRANSFER_COMPLETED) {
+		transferred = tr->transferred;
+		LOG_DEBUG_IO("completed read @ %u, transferred %i",
+					 dap->pending_fifo_get_idx, transferred);
+		memcpy(dap->packet_buffer, tr->buffer, transferred);
+		memset(&dap->packet_buffer[transferred], 0, dap->packet_buffer_size - transferred);
+		tr->status = CMSIS_DAP_TRANSFER_IDLE;
+	}
 
 	return transferred;
 }
 
 static int cmsis_dap_usb_write(struct cmsis_dap *dap, int txlen, int timeout_ms)
 {
-	int transferred = 0;
 	int err;
+	struct cmsis_dap_bulk_transfer *tr;
+	tr = &dap->bdata->command_transfers[dap->pending_fifo_put_idx];
 
-	/* skip the first byte that is only used by the HID backend */
-	err = libusb_bulk_transfer(dap->bdata->dev_handle, dap->bdata->ep_out,
-							dap->packet_buffer, txlen, &transferred, timeout_ms);
-	if (err) {
-		if (err == LIBUSB_ERROR_TIMEOUT) {
-			return ERROR_TIMEOUT_REACHED;
-		} else {
-			LOG_ERROR("error writing data: %s", libusb_strerror(err));
-			return ERROR_FAIL;
-		}
+	if (tr->status == CMSIS_DAP_TRANSFER_PENDING) {
+		LOG_ERROR("busy command USB transfer at %u", dap->pending_fifo_put_idx);
+		struct timeval tv = {
+			.tv_sec = timeout_ms / 1000,
+			.tv_usec = timeout_ms % 1000 * 1000
+		};
+		libusb_handle_events_timeout_completed(dap->bdata->usb_ctx, &tv, &tr->status);
+	}
+	if (tr->status < 0) {
+		if (tr->status != ERROR_TIMEOUT_REACHED)
+			LOG_ERROR("error writing USB data, late detect");
+		else
+			LOG_DEBUG("USB write timeout @ %u, late detect", dap->pending_fifo_get_idx);
+		tr->status = CMSIS_DAP_TRANSFER_IDLE;
+	}
+	if (tr->status == CMSIS_DAP_TRANSFER_COMPLETED) {
+		LOG_ERROR("USB write: late transfer competed");
+		tr->status = CMSIS_DAP_TRANSFER_IDLE;
+	}
+	if (tr->status != CMSIS_DAP_TRANSFER_IDLE) {
+		libusb_cancel_transfer(tr->transfer);
+		/* TODO: switch to less verbose errors and wait for USB working again */
+		return ERROR_JTAG_DEVICE_ERROR;
 	}
 
-	return transferred;
+	memcpy(tr->buffer, dap->packet_buffer, txlen);
+
+	libusb_fill_bulk_transfer(tr->transfer,
+							  dap->bdata->dev_handle, dap->bdata->ep_out,
+							  tr->buffer, txlen,
+							  &cmsis_dap_usb_callback, tr,
+							  timeout_ms);
+
+	LOG_DEBUG_IO("submit write @ %u", dap->pending_fifo_put_idx);
+	tr->status = CMSIS_DAP_TRANSFER_PENDING;
+	err = libusb_submit_transfer(tr->transfer);
+	if (err) {
+		if (err == LIBUSB_ERROR_BUSY)
+			libusb_cancel_transfer(tr->transfer);
+		else
+			tr->status = CMSIS_DAP_TRANSFER_IDLE;
+
+		LOG_ERROR("error submitting USB write: %s", libusb_strerror(err));
+		return ERROR_FAIL;
+	}
+
+	return ERROR_OK;
 }
 
 static int cmsis_dap_usb_alloc(struct cmsis_dap *dap, unsigned int pkt_sz)
 {
-	uint8_t *buf = malloc(pkt_sz);
-	if (!buf) {
+	dap->packet_buffer = malloc(pkt_sz);
+	if (!dap->packet_buffer) {
 		LOG_ERROR("unable to allocate CMSIS-DAP packet buffer");
 		return ERROR_FAIL;
 	}
 
-	dap->packet_buffer = buf;
 	dap->packet_size = pkt_sz;
 	dap->packet_buffer_size = pkt_sz;
+	/* Prevent sending zero size USB packets */
+	dap->packet_usable_size = pkt_sz - 1;
 
 	dap->command = dap->packet_buffer;
 	dap->response = dap->packet_buffer;
 
+	struct cmsis_dap_backend_data *bdata = dap->bdata;
+	for (unsigned int i = 0; i < MAX_PENDING_REQUESTS; i++) {
+		bdata->command_transfers[i].buffer =
+			oocd_libusb_dev_mem_alloc(bdata->dev_handle, pkt_sz);
+
+		bdata->response_transfers[i].buffer =
+			oocd_libusb_dev_mem_alloc(bdata->dev_handle, pkt_sz);
+
+		if (!bdata->command_transfers[i].buffer
+			|| !bdata->response_transfers[i].buffer) {
+			LOG_ERROR("unable to allocate CMSIS-DAP pending packet buffer");
+			return ERROR_FAIL;
+		}
+	}
 	return ERROR_OK;
+}
+
+static void cmsis_dap_usb_free(struct cmsis_dap *dap)
+{
+	struct cmsis_dap_backend_data *bdata = dap->bdata;
+
+	for (unsigned int i = 0; i < MAX_PENDING_REQUESTS; i++) {
+		oocd_libusb_dev_mem_free(bdata->dev_handle,
+			bdata->command_transfers[i].buffer, dap->packet_size);
+		oocd_libusb_dev_mem_free(bdata->dev_handle,
+			bdata->response_transfers[i].buffer, dap->packet_size);
+		bdata->command_transfers[i].buffer = NULL;
+		bdata->response_transfers[i].buffer = NULL;
+	}
+
+	free(dap->packet_buffer);
+	dap->packet_buffer = NULL;
+	dap->command = NULL;
+	dap->response = NULL;
+}
+
+static void cmsis_dap_usb_cancel_all(struct cmsis_dap *dap)
+{
+	for (unsigned int i = 0; i < MAX_PENDING_REQUESTS; i++) {
+		if (dap->bdata->command_transfers[i].status == CMSIS_DAP_TRANSFER_PENDING)
+			libusb_cancel_transfer(dap->bdata->command_transfers[i].transfer);
+		if (dap->bdata->response_transfers[i].status == CMSIS_DAP_TRANSFER_PENDING)
+			libusb_cancel_transfer(dap->bdata->response_transfers[i].transfer);
+
+		dap->bdata->command_transfers[i].status = CMSIS_DAP_TRANSFER_IDLE;
+		dap->bdata->response_transfers[i].status = CMSIS_DAP_TRANSFER_IDLE;
+	}
 }
 
 COMMAND_HANDLER(cmsis_dap_handle_usb_interface_command)
@@ -489,4 +670,6 @@ const struct cmsis_dap_backend cmsis_dap_usb_backend = {
 	.read = cmsis_dap_usb_read,
 	.write = cmsis_dap_usb_write,
 	.packet_buffer_alloc = cmsis_dap_usb_alloc,
+	.packet_buffer_free = cmsis_dap_usb_free,
+	.cancel_all = cmsis_dap_usb_cancel_all,
 };

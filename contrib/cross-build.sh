@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
 
 # This is an example of how to do a cross-build of OpenOCD using pkg-config.
 # Cross-building with pkg-config is deceptively hard and most guides and
@@ -23,7 +24,7 @@
 # export HIDAPI_SRC=/path/to/hidapi
 # export OPENOCD_CONFIG="--enable-..."
 # cd /work/dir
-# .../path/to/openocd/contrib/cross-build.sh <host-triplet>
+# /path/to/openocd/contrib/cross-build.sh <host-triplet>
 #
 # For static linking, a workaround is to
 # export LIBUSB1_CONFIG="--enable-static --disable-shared"
@@ -40,12 +41,14 @@ WORK_DIR=$PWD
 : ${HIDAPI_SRC:=/path/to/hidapi}
 : ${LIBFTDI_SRC:=/path/to/libftdi}
 : ${CAPSTONE_SRC:=/path/to/capstone}
+: ${LIBJAYLINK_SRC:=/path/to/libjaylink}
 
 OPENOCD_SRC=`readlink -m $OPENOCD_SRC`
 LIBUSB1_SRC=`readlink -m $LIBUSB1_SRC`
 HIDAPI_SRC=`readlink -m $HIDAPI_SRC`
 LIBFTDI_SRC=`readlink -m $LIBFTDI_SRC`
 CAPSTONE_SRC=`readlink -m $CAPSTONE_SRC`
+LIBJAYLINK_SRC=`readlink -m $LIBJAYLINK_SRC`
 
 HOST_TRIPLET=$1
 BUILD_DIR=$WORK_DIR/$HOST_TRIPLET-build
@@ -53,6 +56,7 @@ LIBUSB1_BUILD_DIR=$BUILD_DIR/libusb1
 HIDAPI_BUILD_DIR=$BUILD_DIR/hidapi
 LIBFTDI_BUILD_DIR=$BUILD_DIR/libftdi
 CAPSTONE_BUILD_DIR=$BUILD_DIR/capstone
+LIBJAYLINK_BUILD_DIR=$BUILD_DIR/libjaylink
 OPENOCD_BUILD_DIR=$BUILD_DIR/openocd
 
 ## Root of host file tree
@@ -121,11 +125,17 @@ fi
 if [ -d $LIBFTDI_SRC ] ; then
   mkdir -p $LIBFTDI_BUILD_DIR
   cd $LIBFTDI_BUILD_DIR
-  # libftdi requires libusb1 static libraries, granted by:
-  # export LIBUSB1_CONFIG="--enable-static ..."
+  # note : libftdi versions < 1.5 requires libusb1 static
+  #   hint use : # export LIBUSB1_CONFIG="--enable-static ..."
+  #   not needed since libftdi-1.5 when LIBFTDI_CONFIG="-DSTATICLIBS=OFF ..."
+
+  # fix <toolchain>.cmake file
+  ESCAPED_SYSROOT=$(printf '%s\n' "$SYSROOT" | sed -e 's/[\/&]/\\&/g')
+  sed -i -E "s/(SET\(CMAKE_FIND_ROOT_PATH\s+).+\)/\1${ESCAPED_SYSROOT})/" \
+    ${LIBFTDI_SRC}/cmake/Toolchain-${HOST_TRIPLET}.cmake
+
   cmake $LIBFTDI_CONFIG \
-    -DLIBUSB_INCLUDE_DIR=${SYSROOT}${PREFIX}/include/libusb-1.0 \
-    -DLIBUSB_LIBRARIES=${SYSROOT}${PREFIX}/lib/libusb-1.0.a \
+    -DCMAKE_TOOLCHAIN_FILE=${LIBFTDI_SRC}/cmake/Toolchain-${HOST_TRIPLET}.cmake \
     -DCMAKE_INSTALL_PREFIX=${PREFIX} \
     -DPKG_CONFIG_EXECUTABLE=`which pkg-config` \
     $LIBFTDI_SRC
@@ -148,9 +158,19 @@ if [ -d $CAPSTONE_SRC ] ; then
   sed -i '1s;^;prefix=/usr \
 exec_prefix=${prefix} \
 libdir=${exec_prefix}/lib \
-includedir=${prefix}/include\n\n;' $CAPSTONE_PC_FILE
+includedir=${prefix}/include/capstone\n\n;' $CAPSTONE_PC_FILE
 fi
 
+# libjaylink build & install into sysroot
+if [ -d $LIBJAYLINK_SRC ] ; then
+  mkdir -p $LIBJAYLINK_BUILD_DIR
+  cd $LIBJAYLINK_BUILD_DIR
+  $LIBJAYLINK_SRC/configure --build=`$LIBJAYLINK_SRC/config.guess` --host=$HOST_TRIPLET \
+    --with-sysroot=$SYSROOT --prefix=$PREFIX \
+    $LIBJAYLINK_CONFIG
+  make -j $MAKE_JOBS
+  make install DESTDIR=$SYSROOT
+fi
 
 # OpenOCD build & install into sysroot
 mkdir -p $OPENOCD_BUILD_DIR

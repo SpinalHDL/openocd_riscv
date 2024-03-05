@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2009 Zachary T Welch                                    *
  *   zw@superlucidity.net                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_JTAG_INTERFACE_H
@@ -158,6 +147,8 @@ void tap_use_new_tms_table(bool use_new);
 /** @returns True if new TMS table is active; false otherwise. */
 bool tap_uses_new_tms_table(void);
 
+tap_state_t jtag_debug_state_machine_(const void *tms_buf, const void *tdi_buf,
+		unsigned int tap_len, tap_state_t start_tap_state);
 
 /**
  * @brief Prints verbose TAP state transitions for the given TMS/TDI buffers.
@@ -170,10 +161,6 @@ bool tap_uses_new_tms_table(void);
 static inline tap_state_t jtag_debug_state_machine(const void *tms_buf,
 		const void *tdi_buf, unsigned tap_len, tap_state_t start_tap_state)
 {
-	/* Private declaration */
-	tap_state_t jtag_debug_state_machine_(const void *tms_buf, const void *tdi_buf,
-			unsigned tap_len, tap_state_t start_tap_state);
-
 	if (LOG_LEVEL_IS(LOG_LVL_DEBUG_IO))
 		return jtag_debug_state_machine_(tms_buf, tdi_buf, tap_len, start_tap_state);
 	else
@@ -200,10 +187,12 @@ struct jtag_interface {
 #define DEBUG_CAP_TMS_SEQ	(1 << 0)
 
 	/**
-	 * Execute queued commands.
+	 * Execute commands in the supplied queue
+	 * @param cmd_queue - a linked list of commands to execute
 	 * @returns ERROR_OK on success, or an error code on failure.
 	 */
-	int (*execute_queue)(void);
+
+	int (*execute_queue)(struct jtag_command *cmd_queue);
 };
 
 /**
@@ -374,5 +363,46 @@ int adapter_config_trace(bool enabled, enum tpiu_pin_protocol pin_protocol,
 		uint32_t port_size, unsigned int *trace_freq,
 		unsigned int traceclkin_freq, uint16_t *prescaler);
 int adapter_poll_trace(uint8_t *buf, size_t *size);
+
+extern struct adapter_driver am335xgpio_adapter_driver;
+extern struct adapter_driver amt_jtagaccel_adapter_driver;
+extern struct adapter_driver angie_adapter_driver;
+extern struct adapter_driver armjtagew_adapter_driver;
+extern struct adapter_driver at91rm9200_adapter_driver;
+extern struct adapter_driver bcm2835gpio_adapter_driver;
+extern struct adapter_driver buspirate_adapter_driver;
+extern struct adapter_driver cmsis_dap_adapter_driver;
+extern struct adapter_driver dmem_dap_adapter_driver;
+extern struct adapter_driver dummy_adapter_driver;
+extern struct adapter_driver ep93xx_adapter_driver;
+extern struct adapter_driver esp_usb_adapter_driver;
+extern struct adapter_driver ft232r_adapter_driver;
+extern struct adapter_driver ftdi_adapter_driver;
+extern struct adapter_driver gw16012_adapter_driver;
+extern struct adapter_driver hl_adapter_driver;
+extern struct adapter_driver imx_gpio_adapter_driver;
+extern struct adapter_driver jlink_adapter_driver;
+extern struct adapter_driver jtag_dpi_adapter_driver;
+extern struct adapter_driver jtag_tcp_adapter_driver;
+extern struct adapter_driver jtag_vpi_adapter_driver;
+extern struct adapter_driver kitprog_adapter_driver;
+extern struct adapter_driver linuxgpiod_adapter_driver;
+extern struct adapter_driver opendous_adapter_driver;
+extern struct adapter_driver openjtag_adapter_driver;
+extern struct adapter_driver osbdm_adapter_driver;
+extern struct adapter_driver parport_adapter_driver;
+extern struct adapter_driver presto_adapter_driver;
+extern struct adapter_driver remote_bitbang_adapter_driver;
+extern struct adapter_driver rlink_adapter_driver;
+extern struct adapter_driver rshim_dap_adapter_driver;
+extern struct adapter_driver stlink_dap_adapter_driver;
+extern struct adapter_driver sysfsgpio_adapter_driver;
+extern struct adapter_driver ulink_adapter_driver;
+extern struct adapter_driver usb_blaster_adapter_driver;
+extern struct adapter_driver usbprog_adapter_driver;
+extern struct adapter_driver vdebug_adapter_driver;
+extern struct adapter_driver vsllink_adapter_driver;
+extern struct adapter_driver xds110_adapter_driver;
+extern struct adapter_driver xlnx_pcie_xvc_adapter_driver;
 
 #endif /* OPENOCD_JTAG_INTERFACE_H */

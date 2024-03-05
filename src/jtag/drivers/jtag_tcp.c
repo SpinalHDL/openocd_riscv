@@ -286,7 +286,7 @@ static int jtag_tcp_runtest(int num_cycles)
 	
 }
 
-int jtag_tcp_execute_queue(void)
+int jtag_tcp_execute_queue(struct jtag_command *cmd_queue)
 {
 	struct jtag_command *cmd;
 	int retval = ERROR_OK;
@@ -294,7 +294,7 @@ int jtag_tcp_execute_queue(void)
 	int scan_size;
 	enum scan_type type;
 
-	for (cmd = jtag_command_queue; retval == ERROR_OK && cmd != NULL;
+	for (cmd = cmd_queue; retval == ERROR_OK && cmd != NULL;
 	     cmd = cmd->next) {
 		switch (cmd->type) {
 		case JTAG_RESET:
@@ -343,7 +343,7 @@ int jtag_tcp_execute_queue(void)
 			return ERROR_FAIL;
 	}
 
-	for (cmd = jtag_command_queue; retval == ERROR_OK && cmd != NULL;
+	for (cmd = cmd_queue; retval == ERROR_OK && cmd != NULL;
 	     cmd = cmd->next) {
 		switch (cmd->type) {
 			break;

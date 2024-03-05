@@ -1,22 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath <Dominic.Rath@gmx.de>              *
  *   Copyright (C) 2007,2008 Øyvind Harboe <oyvind.harboe@zylin.com>       *
  *   Copyright (C) 2008 by Spencer Oliver <spen@spen-soft.co.uk>           *
  *   Copyright (C) 2009 Zachary T Welch <zw@superlucidity.net>             *
  *   Copyright (C) 2017-2018 Tomas Vanek <vanekt@fbl.cz>                   *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -30,7 +19,7 @@
  * Implements Tcl commands used to access NOR flash facilities.
  */
 
-static COMMAND_HELPER(flash_command_get_bank_maybe_probe, unsigned name_index,
+COMMAND_HELPER(flash_command_get_bank_probe_optional, unsigned int name_index,
 	       struct flash_bank **bank, bool do_probe)
 {
 	const char *name = CMD_ARGV[name_index];
@@ -62,7 +51,7 @@ static COMMAND_HELPER(flash_command_get_bank_maybe_probe, unsigned name_index,
 COMMAND_HELPER(flash_command_get_bank, unsigned name_index,
 	struct flash_bank **bank)
 {
-	return CALL_COMMAND_HANDLER(flash_command_get_bank_maybe_probe,
+	return CALL_COMMAND_HANDLER(flash_command_get_bank_probe_optional,
 				    name_index, bank, true);
 }
 
@@ -168,7 +157,7 @@ COMMAND_HANDLER(handle_flash_probe_command)
 	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
 
-	retval = CALL_COMMAND_HANDLER(flash_command_get_bank_maybe_probe, 0, &p, false);
+	retval = CALL_COMMAND_HANDLER(flash_command_get_bank_probe_optional, 0, &p, false);
 	if (retval != ERROR_OK)
 		return retval;
 
@@ -826,6 +815,7 @@ COMMAND_HANDLER(handle_flash_write_bank_command)
 	if (buf_cnt != length) {
 		LOG_ERROR("Short read");
 		free(buffer);
+		fileio_close(fileio);
 		return ERROR_FAIL;
 	}
 
@@ -1336,40 +1326,27 @@ COMMAND_HANDLER(handle_flash_banks_command)
 	return ERROR_OK;
 }
 
-static int jim_flash_list(Jim_Interp *interp, int argc, Jim_Obj * const *argv)
+COMMAND_HANDLER(handle_flash_list)
 {
-	if (argc != 1) {
-		Jim_WrongNumArgs(interp, 1, argv,
-			"no arguments to 'flash list' command");
-		return JIM_ERR;
-	}
-
-	Jim_Obj *list = Jim_NewListObj(interp, NULL, 0);
+	if (CMD_ARGC != 0)
+		return ERROR_COMMAND_SYNTAX_ERROR;
 
 	for (struct flash_bank *p = flash_bank_list(); p; p = p->next) {
-		Jim_Obj *elem = Jim_NewListObj(interp, NULL, 0);
-
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "name", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, p->name, -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "driver", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, p->driver->name, -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "base", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewIntObj(interp, p->base));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "size", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewIntObj(interp, p->size));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "bus_width", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewIntObj(interp, p->bus_width));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "chip_width", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewIntObj(interp, p->chip_width));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, "target", -1));
-		Jim_ListAppendElement(interp, elem, Jim_NewStringObj(interp, target_name(p->target), -1));
-
-		Jim_ListAppendElement(interp, list, elem);
+		command_print(CMD,
+			"{\n"
+			"    name       %s\n"
+			"    driver     %s\n"
+			"    base       " TARGET_ADDR_FMT "\n"
+			"    size       0x%" PRIx32 "\n"
+			"    bus_width  %u\n"
+			"    chip_width %u\n"
+			"    target     %s\n"
+			"}",
+			p->name, p->driver->name, p->base, p->size, p->bus_width, p->chip_width,
+			target_name(p->target));
 	}
 
-	Jim_SetResult(interp, list);
-
-	return JIM_OK;
+	return ERROR_OK;
 }
 
 COMMAND_HANDLER(handle_flash_init_command)
@@ -1416,8 +1393,9 @@ static const struct command_registration flash_config_command_handlers[] = {
 	{
 		.name = "list",
 		.mode = COMMAND_ANY,
-		.jim_handler = jim_flash_list,
+		.handler = handle_flash_list,
 		.help = "Returns a list of details about the flash banks.",
+		.usage = "",
 	},
 	COMMAND_REGISTRATION_DONE
 };

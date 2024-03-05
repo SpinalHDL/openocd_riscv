@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -10,19 +12,6 @@
  *                                                                         *
  *   Copyright (C) 2018 by Liviu Ionescu                                   *
  *   <ilg@livius.net>                                                      *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -546,7 +535,7 @@ static struct reg_feature arm_gdb_dummy_fp_features = {
  * Modern ARM cores use Vector Floating Point (VFP), if they
  * have any floating point support.  VFP is not FPA-compatible.
  */
-struct reg arm_gdb_dummy_fp_reg = {
+static struct reg arm_gdb_dummy_fp_reg = {
 	.name = "GDB dummy FPA register",
 	.value = (uint8_t *) arm_gdb_dummy_fp_value,
 	.valid = true,
@@ -563,7 +552,7 @@ static const uint8_t arm_gdb_dummy_fps_value[4];
  * Dummy FPA status registers are required to support GDB on ARM.
  * Register packets require an obsolete FPA status register.
  */
-struct reg arm_gdb_dummy_fps_reg = {
+static struct reg arm_gdb_dummy_fps_reg = {
 	.name = "GDB dummy FPA status register",
 	.value = (uint8_t *) arm_gdb_dummy_fps_value,
 	.valid = true,
@@ -589,7 +578,7 @@ static int armv4_5_get_core_reg(struct reg *reg)
 	struct target *target = reg_arch_info->target;
 
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -611,7 +600,7 @@ static int armv4_5_set_core_reg(struct reg *reg, uint8_t *buf)
 	uint32_t value = buf_get_u32(buf, 0, 32);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_ERROR("Target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -828,8 +817,8 @@ COMMAND_HANDLER(handle_armv4_5_reg_command)
 	}
 
 	if (target->state != TARGET_HALTED) {
-		command_print(CMD, "error: target must be halted for register accesses");
-		return ERROR_FAIL;
+		command_print(CMD, "Error: target must be halted for register accesses");
+		return ERROR_TARGET_NOT_HALTED;
 	}
 
 	if (arm->core_type != ARM_CORE_TYPE_STD) {
@@ -844,7 +833,7 @@ COMMAND_HANDLER(handle_armv4_5_reg_command)
 	}
 
 	if (!arm->full_context) {
-		command_print(CMD, "error: target doesn't support %s",
+		command_print(CMD, "Error: target doesn't support %s",
 			CMD_NAME);
 		return ERROR_FAIL;
 	}
@@ -916,32 +905,33 @@ COMMAND_HANDLER(handle_armv4_5_reg_command)
 	return ERROR_OK;
 }
 
-COMMAND_HANDLER(handle_armv4_5_core_state_command)
+COMMAND_HANDLER(handle_arm_core_state_command)
 {
 	struct target *target = get_current_target(CMD_CTX);
 	struct arm *arm = target_to_arm(target);
+	int ret = ERROR_OK;
 
 	if (!is_arm(arm)) {
 		command_print(CMD, "current target isn't an ARM");
 		return ERROR_FAIL;
 	}
 
-	if (arm->core_type == ARM_CORE_TYPE_M_PROFILE) {
-		/* armv7m not supported */
-		command_print(CMD, "Unsupported Command");
-		return ERROR_OK;
-	}
-
 	if (CMD_ARGC > 0) {
-		if (strcmp(CMD_ARGV[0], "arm") == 0)
-			arm->core_state = ARM_STATE_ARM;
+		if (strcmp(CMD_ARGV[0], "arm") == 0) {
+			if (arm->core_type == ARM_CORE_TYPE_M_PROFILE) {
+				command_print(CMD, "arm mode not supported on Cortex-M");
+				ret = ERROR_FAIL;
+			} else {
+				arm->core_state = ARM_STATE_ARM;
+			}
+		}
 		if (strcmp(CMD_ARGV[0], "thumb") == 0)
 			arm->core_state = ARM_STATE_THUMB;
 	}
 
 	command_print(CMD, "core state: %s", arm_state_strings[arm->core_state]);
 
-	return ERROR_OK;
+	return ret;
 }
 
 COMMAND_HANDLER(handle_arm_disassemble_command)
@@ -999,35 +989,38 @@ COMMAND_HANDLER(handle_arm_disassemble_command)
 #endif
 }
 
-static int jim_mcrmrc(Jim_Interp *interp, int argc, Jim_Obj * const *argv)
+COMMAND_HANDLER(handle_armv4_5_mcrmrc)
 {
-	struct command_context *context;
-	struct target *target;
-	struct arm *arm;
-	int retval;
+	bool is_mcr = false;
+	unsigned int arg_cnt = 5;
 
-	context = current_command_context(interp);
-	assert(context);
+	if (!strcmp(CMD_NAME, "mcr")) {
+		is_mcr = true;
+		arg_cnt = 6;
+	}
 
-	target = get_current_target(context);
+	if (arg_cnt != CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	struct target *target = get_current_target(CMD_CTX);
 	if (!target) {
-		LOG_ERROR("%s: no current target", __func__);
-		return JIM_ERR;
+		command_print(CMD, "no current target");
+		return ERROR_FAIL;
 	}
 	if (!target_was_examined(target)) {
-		LOG_ERROR("%s: not yet examined", target_name(target));
-		return JIM_ERR;
-	}
-	arm = target_to_arm(target);
-	if (!is_arm(arm)) {
-		LOG_ERROR("%s: not an ARM", target_name(target));
-		return JIM_ERR;
+		command_print(CMD, "%s: not yet examined", target_name(target));
+		return ERROR_TARGET_NOT_EXAMINED;
 	}
 
-	if ((argc < 6) || (argc > 7)) {
-		/* FIXME use the command name to verify # params... */
-		LOG_ERROR("%s: wrong number of arguments", __func__);
-		return JIM_ERR;
+	struct arm *arm = target_to_arm(target);
+	if (!is_arm(arm)) {
+		command_print(CMD, "%s: not an ARM", target_name(target));
+		return ERROR_FAIL;
+	}
+
+	if (target->state != TARGET_HALTED) {
+		command_print(CMD, "Error: [%s] not halted", target_name(target));
+		return ERROR_TARGET_NOT_HALTED;
 	}
 
 	int cpnum;
@@ -1036,98 +1029,157 @@ static int jim_mcrmrc(Jim_Interp *interp, int argc, Jim_Obj * const *argv)
 	uint32_t crn;
 	uint32_t crm;
 	uint32_t value;
-	long l;
 
 	/* NOTE:  parameter sequence matches ARM instruction set usage:
 	 *	MCR	pNUM, op1, rX, CRn, CRm, op2	; write CP from rX
 	 *	MRC	pNUM, op1, rX, CRn, CRm, op2	; read CP into rX
 	 * The "rX" is necessarily omitted; it uses Tcl mechanisms.
 	 */
-	retval = Jim_GetLong(interp, argv[1], &l);
-	if (retval != JIM_OK)
-		return retval;
-	if (l & ~0xf) {
-		LOG_ERROR("%s: %s %d out of range", __func__,
-			"coprocessor", (int) l);
-		return JIM_ERR;
+	COMMAND_PARSE_NUMBER(int, CMD_ARGV[0], cpnum);
+	if (cpnum & ~0xf) {
+		command_print(CMD, "coprocessor %d out of range", cpnum);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
-	cpnum = l;
 
-	retval = Jim_GetLong(interp, argv[2], &l);
-	if (retval != JIM_OK)
-		return retval;
-	if (l & ~0x7) {
-		LOG_ERROR("%s: %s %d out of range", __func__,
-			"op1", (int) l);
-		return JIM_ERR;
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], op1);
+	if (op1 & ~0x7) {
+		command_print(CMD, "op1 %d out of range", op1);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
-	op1 = l;
 
-	retval = Jim_GetLong(interp, argv[3], &l);
-	if (retval != JIM_OK)
-		return retval;
-	if (l & ~0xf) {
-		LOG_ERROR("%s: %s %d out of range", __func__,
-			"CRn", (int) l);
-		return JIM_ERR;
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], crn);
+	if (crn & ~0xf) {
+		command_print(CMD, "CRn %d out of range", crn);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
-	crn = l;
 
-	retval = Jim_GetLong(interp, argv[4], &l);
-	if (retval != JIM_OK)
-		return retval;
-	if (l & ~0xf) {
-		LOG_ERROR("%s: %s %d out of range", __func__,
-			"CRm", (int) l);
-		return JIM_ERR;
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[3], crm);
+	if (crm & ~0xf) {
+		command_print(CMD, "CRm %d out of range", crm);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
-	crm = l;
 
-	retval = Jim_GetLong(interp, argv[5], &l);
-	if (retval != JIM_OK)
-		return retval;
-	if (l & ~0x7) {
-		LOG_ERROR("%s: %s %d out of range", __func__,
-			"op2", (int) l);
-		return JIM_ERR;
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[4], op2);
+	if (op2 & ~0x7) {
+		command_print(CMD, "op2 %d out of range", op2);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
 	}
-	op2 = l;
 
-	value = 0;
-
-	/* FIXME don't assume "mrc" vs "mcr" from the number of params;
-	 * that could easily be a typo!  Check both...
-	 *
+	/*
 	 * FIXME change the call syntax here ... simplest to just pass
 	 * the MRC() or MCR() instruction to be executed.  That will also
 	 * let us support the "mrc2" and "mcr2" opcodes (toggling one bit)
 	 * if that's ever needed.
 	 */
-	if (argc == 7) {
-		retval = Jim_GetLong(interp, argv[6], &l);
-		if (retval != JIM_OK)
-			return retval;
-		value = l;
+	if (is_mcr) {
+		COMMAND_PARSE_NUMBER(u32, CMD_ARGV[5], value);
 
 		/* NOTE: parameters reordered! */
 		/* ARMV4_5_MCR(cpnum, op1, 0, crn, crm, op2) */
-		retval = arm->mcr(target, cpnum, op1, op2, crn, crm, value);
+		int retval = arm->mcr(target, cpnum, op1, op2, crn, crm, value);
 		if (retval != ERROR_OK)
-			return JIM_ERR;
+			return retval;
 	} else {
+		value = 0;
 		/* NOTE: parameters reordered! */
 		/* ARMV4_5_MRC(cpnum, op1, 0, crn, crm, op2) */
-		retval = arm->mrc(target, cpnum, op1, op2, crn, crm, &value);
+		int retval = arm->mrc(target, cpnum, op1, op2, crn, crm, &value);
 		if (retval != ERROR_OK)
-			return JIM_ERR;
+			return retval;
 
-		Jim_SetResult(interp, Jim_NewIntObj(interp, value));
+		command_print(CMD, "0x%" PRIx32, value);
 	}
 
-	return JIM_OK;
+	return ERROR_OK;
 }
 
-extern const struct command_registration semihosting_common_handlers[];
+COMMAND_HANDLER(handle_armv4_5_mcrrmrrc)
+{
+	bool is_mcrr = false;
+	unsigned int arg_cnt = 3;
+
+	if (!strcmp(CMD_NAME, "mcrr")) {
+		is_mcrr = true;
+		arg_cnt = 4;
+	}
+
+	if (arg_cnt != CMD_ARGC)
+		return ERROR_COMMAND_SYNTAX_ERROR;
+
+	struct target *target = get_current_target(CMD_CTX);
+	if (!target) {
+		command_print(CMD, "no current target");
+		return ERROR_FAIL;
+	}
+	if (!target_was_examined(target)) {
+		command_print(CMD, "%s: not yet examined", target_name(target));
+		return ERROR_TARGET_NOT_EXAMINED;
+	}
+
+	struct arm *arm = target_to_arm(target);
+	if (!is_arm(arm)) {
+		command_print(CMD, "%s: not an ARM", target_name(target));
+		return ERROR_FAIL;
+	}
+
+	if (target->state != TARGET_HALTED)
+		return ERROR_TARGET_NOT_HALTED;
+
+	int cpnum;
+	uint32_t op1;
+	uint32_t crm;
+	uint64_t value;
+
+	/* NOTE:  parameter sequence matches ARM instruction set usage:
+	 *	MCRR	pNUM, op1, rX1, rX2, CRm	; write CP from rX1 and rX2
+	 *	MREC	pNUM, op1, rX1, rX2, CRm	; read CP into rX1 and rX2
+	 * The "rXn" are necessarily omitted; they use Tcl mechanisms.
+	 */
+	COMMAND_PARSE_NUMBER(int, CMD_ARGV[0], cpnum);
+	if (cpnum & ~0xf) {
+		command_print(CMD, "coprocessor %d out of range", cpnum);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
+	}
+
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[1], op1);
+	if (op1 & ~0xf) {
+		command_print(CMD, "op1 %d out of range", op1);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
+	}
+
+	COMMAND_PARSE_NUMBER(u32, CMD_ARGV[2], crm);
+	if (crm & ~0xf) {
+		command_print(CMD, "CRm %d out of range", crm);
+		return ERROR_COMMAND_ARGUMENT_INVALID;
+	}
+
+	/*
+	 * FIXME change the call syntax here ... simplest to just pass
+	 * the MRC() or MCR() instruction to be executed.  That will also
+	 * let us support the "mrrc2" and "mcrr2" opcodes (toggling one bit)
+	 * if that's ever needed.
+	 */
+	if (is_mcrr) {
+		COMMAND_PARSE_NUMBER(u64, CMD_ARGV[3], value);
+
+		/* NOTE: parameters reordered! */
+		/* ARMV5_T_MCRR(cpnum, op1, crm) */
+		int retval = arm->mcrr(target, cpnum, op1, crm, value);
+		if (retval != ERROR_OK)
+			return retval;
+	} else {
+		value = 0;
+		/* NOTE: parameters reordered! */
+		/* ARMV5_T_MRRC(cpnum, op1, crm) */
+		int retval = arm->mrrc(target, cpnum, op1, crm, &value);
+		if (retval != ERROR_OK)
+			return retval;
+
+		command_print(CMD, "0x%" PRIx64, value);
+	}
+
+	return ERROR_OK;
+}
 
 static const struct command_registration arm_exec_command_handlers[] = {
 	{
@@ -1138,8 +1190,43 @@ static const struct command_registration arm_exec_command_handlers[] = {
 		.usage = "",
 	},
 	{
+		.name = "mcr",
+		.mode = COMMAND_EXEC,
+		.handler = handle_armv4_5_mcrmrc,
+		.help = "write coprocessor register",
+		.usage = "cpnum op1 CRn CRm op2 value",
+	},
+	{
+		.name = "mrc",
+		.mode = COMMAND_EXEC,
+		.handler = handle_armv4_5_mcrmrc,
+		.help = "read coprocessor register",
+		.usage = "cpnum op1 CRn CRm op2",
+	},
+	{
+		.name = "mcrr",
+		.mode = COMMAND_EXEC,
+		.handler = handle_armv4_5_mcrrmrrc,
+		.help = "write coprocessor 64-bit register",
+		.usage = "cpnum op1 CRm value",
+	},
+	{
+		.name = "mrrc",
+		.mode = COMMAND_EXEC,
+		.handler = handle_armv4_5_mcrrmrrc,
+		.help = "read coprocessor 64-bit register",
+		.usage = "cpnum op1 CRm",
+	},
+	{
+		.chain = arm_all_profiles_command_handlers,
+	},
+	COMMAND_REGISTRATION_DONE
+};
+
+const struct command_registration arm_all_profiles_command_handlers[] = {
+	{
 		.name = "core_state",
-		.handler = handle_armv4_5_core_state_command,
+		.handler = handle_arm_core_state_command,
 		.mode = COMMAND_EXEC,
 		.usage = "['arm'|'thumb']",
 		.help = "display/change ARM core state",
@@ -1152,24 +1239,11 @@ static const struct command_registration arm_exec_command_handlers[] = {
 		.help = "disassemble instructions",
 	},
 	{
-		.name = "mcr",
-		.mode = COMMAND_EXEC,
-		.jim_handler = &jim_mcrmrc,
-		.help = "write coprocessor register",
-		.usage = "cpnum op1 CRn CRm op2 value",
-	},
-	{
-		.name = "mrc",
-		.mode = COMMAND_EXEC,
-		.jim_handler = &jim_mcrmrc,
-		.help = "read coprocessor register",
-		.usage = "cpnum op1 CRn CRm op2",
-	},
-	{
 		.chain = semihosting_common_handlers,
 	},
 	COMMAND_REGISTRATION_DONE
 };
+
 const struct command_registration arm_command_handlers[] = {
 	{
 		.name = "arm",
@@ -1190,7 +1264,7 @@ const struct command_registration arm_command_handlers[] = {
  * same way as a gdb for arm. This can be changed later on. User can still
  * set the specific architecture variant with the gdb command.
  */
-const char *arm_get_gdb_arch(struct target *target)
+const char *arm_get_gdb_arch(const struct target *target)
 {
 	return "arm";
 }
@@ -1282,7 +1356,7 @@ int arm_get_gdb_reg_list(struct target *target,
 /* wait for execution to complete and check exit point */
 static int armv4_5_run_algorithm_completion(struct target *target,
 	uint32_t exit_point,
-	int timeout_ms,
+	unsigned int timeout_ms,
 	void *arch_info)
 {
 	int retval;
@@ -1316,9 +1390,9 @@ int armv4_5_run_algorithm_inner(struct target *target,
 	int num_mem_params, struct mem_param *mem_params,
 	int num_reg_params, struct reg_param *reg_params,
 	uint32_t entry_point, uint32_t exit_point,
-	int timeout_ms, void *arch_info,
+	unsigned int timeout_ms, void *arch_info,
 	int (*run_it)(struct target *target, uint32_t exit_point,
-	int timeout_ms, void *arch_info))
+	unsigned int timeout_ms, void *arch_info))
 {
 	struct arm *arm = target_to_arm(target);
 	struct arm_algorithm *arm_algorithm_info = arch_info;
@@ -1337,7 +1411,7 @@ int armv4_5_run_algorithm_inner(struct target *target,
 	}
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
+		LOG_TARGET_ERROR(target, "not halted (run target algo)");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1504,7 +1578,7 @@ int armv4_5_run_algorithm(struct target *target,
 	struct reg_param *reg_params,
 	target_addr_t entry_point,
 	target_addr_t exit_point,
-	int timeout_ms,
+	unsigned int timeout_ms,
 	void *arch_info)
 {
 	return armv4_5_run_algorithm_inner(target,
@@ -1565,7 +1639,7 @@ int arm_checksum_memory(struct target *target,
 	buf_set_u32(reg_params[1].value, 0, 32, count);
 
 	/* 20 second timeout/megabyte */
-	int timeout = 20000 * (1 + (count / (1024 * 1024)));
+	unsigned int timeout = 20000 * (1 + (count / (1024 * 1024)));
 
 	/* armv4 must exit using a hardware breakpoint */
 	if (arm->arch == ARM_ARCH_V4)
@@ -1697,12 +1771,28 @@ static int arm_default_mrc(struct target *target, int cpnum,
 	return ERROR_FAIL;
 }
 
+static int arm_default_mrrc(struct target *target, int cpnum,
+	uint32_t op, uint32_t crm,
+	uint64_t *value)
+{
+	LOG_ERROR("%s doesn't implement MRRC", target_type_name(target));
+	return ERROR_FAIL;
+}
+
 static int arm_default_mcr(struct target *target, int cpnum,
 	uint32_t op1, uint32_t op2,
 	uint32_t crn, uint32_t crm,
 	uint32_t value)
 {
 	LOG_ERROR("%s doesn't implement MCR", target_type_name(target));
+	return ERROR_FAIL;
+}
+
+static int arm_default_mcrr(struct target *target, int cpnum,
+	uint32_t op, uint32_t crm,
+	uint64_t value)
+{
+	LOG_ERROR("%s doesn't implement MCRR", target_type_name(target));
 	return ERROR_FAIL;
 }
 
@@ -1725,8 +1815,12 @@ int arm_init_arch_info(struct target *target, struct arm *arm)
 
 	if (!arm->mrc)
 		arm->mrc = arm_default_mrc;
+	if (!arm->mrrc)
+		arm->mrrc = arm_default_mrrc;
 	if (!arm->mcr)
 		arm->mcr = arm_default_mcr;
+	if (!arm->mcrr)
+		arm->mcrr = arm_default_mcrr;
 
 	return ERROR_OK;
 }

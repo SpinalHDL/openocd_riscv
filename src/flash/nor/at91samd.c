@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2013 by Andrey Yurovsky                                 *
  *   Andrey Yurovsky <yurovsky@gmail.com>                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -23,6 +12,7 @@
 #include "imp.h"
 #include "helper/binarybuffer.h"
 
+#include <helper/time_support.h>
 #include <jtag/jtag.h>
 #include <target/cortex_m.h>
 
@@ -42,7 +32,7 @@
 #define SAMD_NVMCTRL_CTRLA		0x00	/* NVM control A register */
 #define SAMD_NVMCTRL_CTRLB		0x04	/* NVM control B register */
 #define SAMD_NVMCTRL_PARAM		0x08	/* NVM parameters register */
-#define SAMD_NVMCTRL_INTFLAG	0x18	/* NVM Interrupt Flag Status & Clear */
+#define SAMD_NVMCTRL_INTFLAG	0x14	/* NVM Interrupt Flag Status & Clear */
 #define SAMD_NVMCTRL_STATUS		0x18	/* NVM status register */
 #define SAMD_NVMCTRL_ADDR		0x1C	/* NVM address register */
 #define SAMD_NVMCTRL_LOCK		0x20	/* NVM Lock section register */
@@ -66,6 +56,9 @@
 /* NVMCTRL bits */
 #define SAMD_NVM_CTRLB_MANW 0x80
 
+/* NVMCTRL_INTFLAG bits */
+#define SAMD_NVM_INTFLAG_READY 0x01
+
 /* Known identifiers */
 #define SAMD_PROCESSOR_M0	0x01
 #define SAMD_FAMILY_D		0x00
@@ -85,7 +78,7 @@
 #define SAMD_GET_DEVSEL(id) (id & 0xFF)
 
 /* Bits to mask out lockbits in user row */
-#define NVMUSERROW_LOCKBIT_MASK ((uint64_t)0x0000FFFFFFFFFFFF)
+#define NVMUSERROW_LOCKBIT_MASK 0x0000FFFFFFFFFFFFULL
 
 struct samd_part {
 	uint8_t id;
@@ -250,8 +243,12 @@ static const struct samd_part saml21_parts[] = {
 	{ 0x1F, "SAMR30E18A", 256, 32 },
 
     /* SAMR34/R35 parts have integrated SAML21 with a lora radio */
-	{ 0x28, "SAMR34J18", 256, 32 },
-	{ 0x2B, "SAMR35J18", 256, 32 },
+	{ 0x28, "SAMR34J18", 256, 40 },
+	{ 0x29, "SAMR34J17", 128, 24 },
+	{ 0x2A, "SAMR34J16", 64, 12 },
+	{ 0x2B, "SAMR35J18", 256, 40 },
+	{ 0x2C, "SAMR35J17", 128, 24 },
+	{ 0x2D, "SAMR35J16", 64, 12 },
 };
 
 /* Known SAML22 parts. */
@@ -319,31 +316,31 @@ struct samd_family {
 static const struct samd_family samd_families[] = {
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_D, SAMD_SERIES_20,
 		samd20_parts, ARRAY_SIZE(samd20_parts),
-		(uint64_t)0xFFFF01FFFE01FF77 },
+		0xFFFF01FFFE01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_D, SAMD_SERIES_21,
 		samd21_parts, ARRAY_SIZE(samd21_parts),
-		(uint64_t)0xFFFF01FFFE01FF77 },
+		0xFFFF01FFFE01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_D, SAMD_SERIES_09,
 		samd09_parts, ARRAY_SIZE(samd09_parts),
-		(uint64_t)0xFFFF01FFFE01FF77 },
+		0xFFFF01FFFE01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_D, SAMD_SERIES_10,
 		samd10_parts, ARRAY_SIZE(samd10_parts),
-		(uint64_t)0xFFFF01FFFE01FF77 },
+		0xFFFF01FFFE01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_D, SAMD_SERIES_11,
 		samd11_parts, ARRAY_SIZE(samd11_parts),
-		(uint64_t)0xFFFF01FFFE01FF77 },
+		0xFFFF01FFFE01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_L, SAMD_SERIES_21,
 		saml21_parts, ARRAY_SIZE(saml21_parts),
-		(uint64_t)0xFFFF03FFFC01FF77 },
+		0xFFFF03FFFC01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_L, SAMD_SERIES_22,
 		saml22_parts, ARRAY_SIZE(saml22_parts),
-		(uint64_t)0xFFFF03FFFC01FF77 },
+		0xFFFF03FFFC01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_C, SAMD_SERIES_20,
 		samc20_parts, ARRAY_SIZE(samc20_parts),
-		(uint64_t)0xFFFF03FFFC01FF77 },
+		0xFFFF03FFFC01FF77ULL },
 	{ SAMD_PROCESSOR_M0, SAMD_FAMILY_C, SAMD_SERIES_21,
 		samc21_parts, ARRAY_SIZE(samc21_parts),
-		(uint64_t)0xFFFF03FFFC01FF77 },
+		0xFFFF03FFFC01FF77ULL },
 };
 
 struct samd_info {
@@ -508,7 +505,27 @@ static int samd_probe(struct flash_bank *bank)
 static int samd_check_error(struct target *target)
 {
 	int ret, ret2;
+	uint8_t intflag;
 	uint16_t status;
+	int timeout_ms = 1000;
+	int64_t ts_start = timeval_ms();
+
+	do {
+		ret = target_read_u8(target,
+			SAMD_NVMCTRL + SAMD_NVMCTRL_INTFLAG, &intflag);
+		if (ret != ERROR_OK) {
+			LOG_ERROR("Can't read NVM intflag");
+			return ret;
+		}
+		if (intflag & SAMD_NVM_INTFLAG_READY)
+			break;
+		keep_alive();
+	} while (timeval_ms() - ts_start < timeout_ms);
+
+	if (!(intflag & SAMD_NVM_INTFLAG_READY)) {
+		LOG_ERROR("SAMD: NVM programming timed out");
+		return ERROR_FLASH_OPERATION_FAILED;
+	}
 
 	ret = target_read_u16(target,
 			SAMD_NVMCTRL + SAMD_NVMCTRL_STATUS, &status);
@@ -554,7 +571,8 @@ static int samd_issue_nvmctrl_command(struct target *target, uint16_t cmd)
 	}
 
 	/* Issue the NVM command */
-	res = target_write_u16(target,
+	/* 32-bit write is used to ensure atomic operation on ST-Link */
+	res = target_write_u32(target,
 			SAMD_NVMCTRL + SAMD_NVMCTRL_CTRLA, SAMD_NVM_CMD(cmd));
 	if (res != ERROR_OK)
 		return res;

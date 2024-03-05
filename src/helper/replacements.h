@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2006 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2008 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_HELPER_REPLACEMENTS_H
@@ -77,12 +66,10 @@ int gettimeofday(struct timeval *tv, struct timezone *tz);
 
 #endif
 
-#ifndef IN_REPLACEMENTS_C
-/**** clear_malloc & fill_malloc ****/
 void *clear_malloc(size_t size);
 void *fill_malloc(size_t size);
-#endif
 
+#ifndef IN_REPLACEMENTS_C
 /*
  * Now you have 3 ways for the malloc function:
  *
@@ -111,6 +98,7 @@ void *fill_malloc(size_t size);
 
 /* #define malloc(_a) clear_malloc(_a)
  * #define malloc(_a) fill_malloc(_a) */
+#endif  /* IN_REPLACEMENTS_C */
 
 /* GNU extensions to the C library that may be missing on some systems */
 #ifndef HAVE_STRNDUP

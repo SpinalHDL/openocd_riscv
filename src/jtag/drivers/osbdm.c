@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2012 by Jan Dakinevich                                  *
  *   jan.dakinevich@gmail.com                                              *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 #ifdef HAVE_CONFIG_H
 #	include "config.h"
@@ -374,7 +363,7 @@ static int osbdm_flush(struct osbdm *osbdm, struct queue *queue)
 static int osbdm_open(struct osbdm *osbdm)
 {
 	(void)memset(osbdm, 0, sizeof(*osbdm));
-	if (jtag_libusb_open(osbdm_vid, osbdm_pid, &osbdm->devh, NULL) != ERROR_OK)
+	if (jtag_libusb_open(osbdm_vid, osbdm_pid, NULL, &osbdm->devh, NULL) != ERROR_OK)
 		return ERROR_FAIL;
 
 	if (libusb_claim_interface(osbdm->devh, 0) != ERROR_OK)
@@ -639,7 +628,7 @@ static int osbdm_execute_command(
 	return retval;
 }
 
-static int osbdm_execute_queue(void)
+static int osbdm_execute_queue(struct jtag_command *cmd_queue)
 {
 	int retval = ERROR_OK;
 
@@ -648,7 +637,7 @@ static int osbdm_execute_queue(void)
 		LOG_ERROR("BUG: can't allocate bit queue");
 		retval = ERROR_FAIL;
 	} else {
-		struct jtag_command *cmd = jtag_command_queue;
+		struct jtag_command *cmd = cmd_queue;
 
 		while (retval == ERROR_OK && cmd) {
 			retval = osbdm_execute_command(&osbdm_context, queue, cmd);

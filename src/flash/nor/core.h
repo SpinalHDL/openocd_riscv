@@ -1,22 +1,11 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath <Dominic.Rath@gmx.de>              *
  *   Copyright (C) 2007,2008 Øyvind Harboe <oyvind.harboe@zylin.com>       *
  *   Copyright (C) 2008 by Spencer Oliver <spen@spen-soft.co.uk>           *
  *   Copyright (C) 2009 Zachary T Welch <zw@superlucidity.net>             *
  *   Copyright (C) 2010 by Antonio Borneo <borneo.antonio@gmail.com>       *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_FLASH_NOR_CORE_H
@@ -30,8 +19,6 @@
  */
 
 struct image;
-
-#define FLASH_MAX_ERROR_STR	(128)
 
 /**
  * Describes the geometry and status of a single flash sector
@@ -265,6 +252,19 @@ int get_flash_bank_by_num(unsigned int num, struct flash_bank **bank);
  */
 COMMAND_HELPER(flash_command_get_bank, unsigned name_index,
 		struct flash_bank **bank);
+/**
+ * Retrieves @a bank from a command argument, reporting errors parsing
+ * the bank identifier or retrieving the specified bank.  The bank
+ * may be identified by its bank number or by @c name.instance, where
+ * @a instance is driver-specific.
+ * @param name_index The index to the string in args containing the
+ * bank identifier.
+ * @param bank On output, contains a pointer to the bank or NULL.
+ * @param do_probe Does auto-probing when set, otherwise without probing.
+ * @returns ERROR_OK on success, or an error indicating the problem.
+ */
+COMMAND_HELPER(flash_command_get_bank_probe_optional, unsigned int name_index,
+		struct flash_bank **bank, bool do_probe);
 /**
  * Returns the flash bank like get_flash_bank_by_num(), without probing.
  * @param num The flash bank number.

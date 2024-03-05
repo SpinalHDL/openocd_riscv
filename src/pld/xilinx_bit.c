@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2006 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -24,7 +13,6 @@
 #include "pld.h"
 #include <helper/log.h>
 
-#include <sys/stat.h>
 #include <helper/system.h>
 
 static int read_section(FILE *input_file, int length_size, char section,
@@ -71,26 +59,10 @@ static int read_section(FILE *input_file, int length_size, char section,
 int xilinx_read_bit_file(struct xilinx_bit_file *bit_file, const char *filename)
 {
 	FILE *input_file;
-	struct stat input_stat;
 	int read_count;
 
 	if (!filename || !bit_file)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-
-	if (stat(filename, &input_stat) == -1) {
-		LOG_ERROR("couldn't stat() %s: %s", filename, strerror(errno));
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
-
-	if (S_ISDIR(input_stat.st_mode)) {
-		LOG_ERROR("%s is a directory", filename);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
-
-	if (input_stat.st_size == 0) {
-		LOG_ERROR("Empty file %s", filename);
-		return ERROR_PLD_FILE_LOAD_FAILED;
-	}
 
 	input_file = fopen(filename, "rb");
 	if (!input_file) {
@@ -98,26 +70,48 @@ int xilinx_read_bit_file(struct xilinx_bit_file *bit_file, const char *filename)
 		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
 
+	bit_file->source_file = NULL;
+	bit_file->part_name = NULL;
+	bit_file->date = NULL;
+	bit_file->time = NULL;
+	bit_file->data = NULL;
+
 	read_count = fread(bit_file->unknown_header, 1, 13, input_file);
 	if (read_count != 13) {
 		LOG_ERROR("couldn't read unknown_header from file '%s'", filename);
+		fclose(input_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
 	}
 
-	if (read_section(input_file, 2, 'a', NULL, &bit_file->source_file) != ERROR_OK)
+	if (read_section(input_file, 2, 'a', NULL, &bit_file->source_file) != ERROR_OK) {
+		xilinx_free_bit_file(bit_file);
+		fclose(input_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
+	}
 
-	if (read_section(input_file, 2, 'b', NULL, &bit_file->part_name) != ERROR_OK)
+	if (read_section(input_file, 2, 'b', NULL, &bit_file->part_name) != ERROR_OK) {
+		xilinx_free_bit_file(bit_file);
+		fclose(input_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
+	}
 
-	if (read_section(input_file, 2, 'c', NULL, &bit_file->date) != ERROR_OK)
+	if (read_section(input_file, 2, 'c', NULL, &bit_file->date) != ERROR_OK) {
+		xilinx_free_bit_file(bit_file);
+		fclose(input_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
+	}
 
-	if (read_section(input_file, 2, 'd', NULL, &bit_file->time) != ERROR_OK)
+	if (read_section(input_file, 2, 'd', NULL, &bit_file->time) != ERROR_OK) {
+		xilinx_free_bit_file(bit_file);
+		fclose(input_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
+	}
 
-	if (read_section(input_file, 4, 'e', &bit_file->length, &bit_file->data) != ERROR_OK)
+	if (read_section(input_file, 4, 'e', &bit_file->length, &bit_file->data) != ERROR_OK) {
+		xilinx_free_bit_file(bit_file);
+		fclose(input_file);
 		return ERROR_PLD_FILE_LOAD_FAILED;
+	}
 
 	LOG_DEBUG("bit_file: %s %s %s,%s %" PRIu32 "", bit_file->source_file, bit_file->part_name,
 		bit_file->date, bit_file->time, bit_file->length);
@@ -125,4 +119,13 @@ int xilinx_read_bit_file(struct xilinx_bit_file *bit_file, const char *filename)
 	fclose(input_file);
 
 	return ERROR_OK;
+}
+
+void xilinx_free_bit_file(struct xilinx_bit_file *bit_file)
+{
+	free(bit_file->source_file);
+	free(bit_file->part_name);
+	free(bit_file->date);
+	free(bit_file->time);
+	free(bit_file->data);
 }

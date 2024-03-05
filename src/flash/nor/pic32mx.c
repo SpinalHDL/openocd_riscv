@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2008 by John McCarthy                                   *
  *   jgmcc@magma.ca                                                        *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -770,7 +759,7 @@ static int pic32mx_probe(struct flash_bank *bank)
 		}
 	}
 
-	LOG_INFO("flash size = %" PRIu32 "kbytes", num_pages / 1024);
+	LOG_INFO("flash size = %" PRIu32 " KiB", num_pages / 1024);
 
 	free(bank->sectors);
 
@@ -877,10 +866,8 @@ COMMAND_HANDLER(pic32mx_handle_unlock_command)
 	struct mips_ejtag *ejtag_info;
 	int timeout = 10;
 
-	if (CMD_ARGC < 1) {
-		command_print(CMD, "pic32mx unlock <bank>");
+	if (CMD_ARGC != 1)
 		return ERROR_COMMAND_SYNTAX_ERROR;
-	}
 
 	struct flash_bank *bank;
 	int retval = CALL_COMMAND_HANDLER(flash_command_get_bank, 0, &bank);
@@ -943,7 +930,7 @@ static const struct command_registration pic32mx_exec_command_handlers[] = {
 		.name = "unlock",
 		.handler = pic32mx_handle_unlock_command,
 		.mode = COMMAND_EXEC,
-		.usage = "[bank_id]",
+		.usage = "bank_id",
 		.help = "Unlock/Erase entire device.",
 	},
 	COMMAND_REGISTRATION_DONE

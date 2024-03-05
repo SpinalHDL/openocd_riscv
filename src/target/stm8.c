@@ -1,20 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /*
 *   OpenOCD STM8 target driver
 *   Copyright (C) 2017  Ake Rehnman
 *   ake.rehnman(at)gmail.com
-*
-*   This program is free software: you can redistribute it and/or modify
-*   it under the terms of the GNU General Public License as published by
-*   the Free Software Foundation, either version 2 of the License, or
-*   (at your option) any later version.
-*
-*   This program is distributed in the hope that it will be useful,
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*   GNU General Public License for more details.
-*
-*   You should have received a copy of the GNU General Public License
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #ifdef HAVE_CONFIG_H
@@ -553,12 +542,12 @@ static int stm8_get_core_reg(struct reg *reg)
 	int retval;
 	struct stm8_core_reg *stm8_reg = reg->arch_info;
 	struct target *target = stm8_reg->target;
-	struct stm8_common *stm8_target = target_to_stm8(target);
+	struct stm8_common *stm8 = target_to_stm8(target);
 
 	if (target->state != TARGET_HALTED)
 		return ERROR_TARGET_NOT_HALTED;
 
-	retval = stm8_target->read_core_reg(target, stm8_reg->num);
+	retval = stm8->read_core_reg(target, stm8_reg->num);
 
 	return retval;
 }
@@ -1005,7 +994,7 @@ static int stm8_resume(struct target *target, int current,
 			handle_breakpoints, debug_execution);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1169,7 +1158,7 @@ static int stm8_write_core_reg(struct target *target, unsigned int num)
 	return ERROR_OK;
 }
 
-static const char *stm8_get_gdb_arch(struct target *target)
+static const char *stm8_get_gdb_arch(const struct target *target)
 {
 	return "stm8";
 }
@@ -1314,7 +1303,7 @@ static int stm8_step(struct target *target, int current,
 	struct breakpoint *breakpoint = NULL;
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1529,7 +1518,7 @@ static int stm8_remove_breakpoint(struct target *target,
 	struct stm8_common *stm8 = target_to_stm8(target);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1665,7 +1654,7 @@ static int stm8_remove_watchpoint(struct target *target,
 	struct stm8_common *stm8 = target_to_stm8(target);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 
@@ -1795,7 +1784,7 @@ static int stm8_checksum_memory(struct target *target, target_addr_t address,
 
 /* run to exit point. return error if exit point was not reached. */
 static int stm8_run_and_wait(struct target *target, uint32_t entry_point,
-		int timeout_ms, uint32_t exit_point, struct stm8_common *stm8)
+		unsigned int timeout_ms, uint32_t exit_point, struct stm8_common *stm8)
 {
 	uint32_t pc;
 	int retval;
@@ -1830,7 +1819,7 @@ static int stm8_run_and_wait(struct target *target, uint32_t entry_point,
 static int stm8_run_algorithm(struct target *target, int num_mem_params,
 		struct mem_param *mem_params, int num_reg_params,
 		struct reg_param *reg_params, target_addr_t entry_point,
-		target_addr_t exit_point, int timeout_ms, void *arch_info)
+		target_addr_t exit_point, unsigned int timeout_ms, void *arch_info)
 {
 	struct stm8_common *stm8 = target_to_stm8(target);
 

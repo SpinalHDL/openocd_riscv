@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -11,19 +13,6 @@
  *                                                                         *
  *   Copyright (C) 2009 Zachary T Welch                                    *
  *   zw@superlucidity.net                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -44,7 +33,7 @@ struct cmd_queue_page {
 static struct cmd_queue_page *cmd_queue_pages;
 static struct cmd_queue_page *cmd_queue_pages_tail;
 
-struct jtag_command *jtag_command_queue;
+static struct jtag_command *jtag_command_queue;
 static struct jtag_command **next_command_pointer = &jtag_command_queue;
 
 void jtag_queue_command(struct jtag_command *cmd)
@@ -156,6 +145,11 @@ void jtag_command_queue_reset(void)
 
 	jtag_command_queue = NULL;
 	next_command_pointer = &jtag_command_queue;
+}
+
+struct jtag_command *jtag_command_queue_get(void)
+{
+	return jtag_command_queue;
 }
 
 /**

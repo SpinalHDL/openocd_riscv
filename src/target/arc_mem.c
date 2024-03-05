@@ -1,11 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2013-2014,2019-2020 Synopsys, Inc.                      *
  *   Frank Dols <frank.dols@synopsys.com>                                  *
  *   Mischa Jonker <mischa.jonker@synopsys.com>                            *
  *   Anton Kolesov <anton.kolesov@synopsys.com>                            *
  *   Evgeniy Didin <didin@synopsys.com>                                    *
- *                                                                         *
- *   SPDX-License-Identifier: GPL-2.0-or-later                             *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -162,7 +162,7 @@ int arc_mem_write(struct target *target, target_addr_t address, uint32_t size,
 		address, size, count);
 
 	if (target->state != TARGET_HALTED) {
-		LOG_WARNING("target not halted");
+		LOG_TARGET_ERROR(target, "not halted");
 		return ERROR_TARGET_NOT_HALTED;
 	}
 

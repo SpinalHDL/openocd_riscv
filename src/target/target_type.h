@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /***************************************************************************
  *   Copyright (C) 2005 by Dominic Rath                                    *
  *   Dominic.Rath@gmx.de                                                   *
@@ -7,19 +9,6 @@
  *                                                                         *
  *   Copyright (C) 2008 by Spencer Oliver                                  *
  *   spen@spen-soft.co.uk                                                  *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifndef OPENOCD_TARGET_TARGET_TYPE_H
@@ -94,7 +83,7 @@ struct target_type {
 	 * if dynamic allocation is used for this value, it must be managed by
 	 * the target, ideally by caching the result for subsequent calls.
 	 */
-	const char *(*get_gdb_arch)(struct target *target);
+	const char *(*get_gdb_arch)(const struct target *target);
 
 	/**
 	 * Target register access for GDB.  Do @b not call this function
@@ -192,7 +181,7 @@ struct target_type {
 	int (*run_algorithm)(struct target *target, int num_mem_params,
 			struct mem_param *mem_params, int num_reg_params,
 			struct reg_param *reg_param, target_addr_t entry_point,
-			target_addr_t exit_point, int timeout_ms, void *arch_info);
+			target_addr_t exit_point, unsigned int timeout_ms, void *arch_info);
 	int (*start_algorithm)(struct target *target, int num_mem_params,
 			struct mem_param *mem_params, int num_reg_params,
 			struct reg_param *reg_param, target_addr_t entry_point,
@@ -200,7 +189,7 @@ struct target_type {
 	int (*wait_algorithm)(struct target *target, int num_mem_params,
 			struct mem_param *mem_params, int num_reg_params,
 			struct reg_param *reg_param, target_addr_t exit_point,
-			int timeout_ms, void *arch_info);
+			unsigned int timeout_ms, void *arch_info);
 
 	const struct command_registration *commands;
 
@@ -241,6 +230,17 @@ struct target_type {
 
 	/**
 	 * Free all the resources allocated by the target.
+	 *
+	 * WARNING: deinit_target is called unconditionally regardless the target has
+	 * ever been examined/initialised or not.
+	 * If a problem has prevented establishing JTAG/SWD/... communication
+	 *  or
+	 * if the target was created with -defer-examine flag and has never been
+	 *  examined
+	 * then it is not possible to communicate with the target.
+	 *
+	 * If you need to talk to the target during deinit, first check if
+	 * target_was_examined()!
 	 *
 	 * @param target The target to deinit
 	 */
@@ -286,6 +286,15 @@ struct target_type {
 	 */
 	int (*gdb_fileio_end)(struct target *target, int retcode, int fileio_errno, bool ctrl_c);
 
+	/* Parse target-specific GDB query commands.
+	 * The string pointer "response_p" is always assigned by the called function
+	 * to a pointer to a NULL-terminated string, even when the function returns
+	 * an error. The string memory is not freed by the caller, so this function
+	 * must pay attention for possible memory leaks if the string memory is
+	 * dynamically allocated.
+	 */
+	int (*gdb_query_custom)(struct target *target, const char *packet, char **response_p);
+
 	/* do target profiling
 	 */
 	int (*profiling)(struct target *target, uint32_t *samples,
@@ -301,5 +310,45 @@ struct target_type {
 	 * not implemented, it's assumed to be 32. */
 	unsigned int (*data_bits)(struct target *target);
 };
+
+extern struct target_type aarch64_target;
+extern struct target_type arcv2_target;
+extern struct target_type arm11_target;
+extern struct target_type arm720t_target;
+extern struct target_type arm7tdmi_target;
+extern struct target_type arm920t_target;
+extern struct target_type arm926ejs_target;
+extern struct target_type arm946e_target;
+extern struct target_type arm966e_target;
+extern struct target_type arm9tdmi_target;
+extern struct target_type armv8r_target;
+extern struct target_type avr32_ap7k_target;
+extern struct target_type avr_target;
+extern struct target_type cortexa_target;
+extern struct target_type cortexm_target;
+extern struct target_type cortexr4_target;
+extern struct target_type dragonite_target;
+extern struct target_type dsp563xx_target;
+extern struct target_type dsp5680xx_target;
+extern struct target_type esirisc_target;
+extern struct target_type esp32s2_target;
+extern struct target_type esp32s3_target;
+extern struct target_type esp32_target;
+extern struct target_type fa526_target;
+extern struct target_type feroceon_target;
+extern struct target_type hla_target;
+extern struct target_type ls1_sap_target;
+extern struct target_type mem_ap_target;
+extern struct target_type mips_m4k_target;
+extern struct target_type mips_mips64_target;
+extern struct target_type or1k_target;
+extern struct target_type quark_d20xx_target;
+extern struct target_type quark_x10xx_target;
+extern struct target_type riscv_target;
+extern struct target_type stm8_target;
+extern struct target_type testee_target;
+extern struct target_type vexriscv_target;
+extern struct target_type xscale_target;
+extern struct target_type xtensa_chip_target;
 
 #endif /* OPENOCD_TARGET_TARGET_TYPE_H */

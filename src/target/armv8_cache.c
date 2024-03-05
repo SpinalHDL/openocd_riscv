@@ -1,19 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /***************************************************************************
  *   Copyright (C) 2016 by Matthias Welwarsky                              *
  *   matthias.welwarsky@sysgo.com                                          *
- *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
- *                                                                         *
- *   This program is distributed in the hope that it will be useful,       *
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
- *   GNU General Public License for more details.                          *
- *                                                                         *
- *   You should have received a copy of the GNU General Public License     *
- *   along with this program.  If not, see <http://www.gnu.org/licenses/>. *
  ***************************************************************************/
 
 #ifdef HAVE_CONFIG_H
@@ -254,7 +243,7 @@ static int  armv8_flush_all_data(struct target *target)
 		foreach_smp_target(head, target->smp_targets) {
 			struct target *curr = head->target;
 			if (curr->state == TARGET_HALTED) {
-				LOG_INFO("Wait flushing data l1 on core %" PRId32, curr->coreid);
+				LOG_TARGET_INFO(curr, "Wait flushing data l1.");
 				retval = _armv8_flush_all_data(curr);
 			}
 		}
@@ -297,8 +286,9 @@ static struct armv8_cachesize decode_cache_reg(uint32_t cache_reg)
 	size.index = (cache_reg >> 13) & 0x7fff;
 	size.way = ((cache_reg >> 3) & 0x3ff);
 
-	while (((size.way << i) & 0x80000000) == 0)
-		i++;
+	if (size.way != 0)
+		while (((size.way << i) & 0x80000000) == 0)
+			i++;
 	size.way_shift = i;
 
 	return size;

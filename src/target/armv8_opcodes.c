@@ -1,16 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 /*
  * Copyright (C) 2015 by Matthias Welwarsky <matthias.welwarsky@sysgo.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 
 #ifdef HAVE_CONFIG_H
@@ -45,9 +36,11 @@ static const uint32_t a64_opcodes[ARMV8_OPC_NUM] = {
 		[ARMV8_OPC_LDRB_IP]	= ARMV8_LDRB_IP(1, 0),
 		[ARMV8_OPC_LDRH_IP]	= ARMV8_LDRH_IP(1, 0),
 		[ARMV8_OPC_LDRW_IP]	= ARMV8_LDRW_IP(1, 0),
+		[ARMV8_OPC_LDRD_IP]	= ARMV8_LDRD_IP(1, 0),
 		[ARMV8_OPC_STRB_IP]	= ARMV8_STRB_IP(1, 0),
 		[ARMV8_OPC_STRH_IP]	= ARMV8_STRH_IP(1, 0),
 		[ARMV8_OPC_STRW_IP]	= ARMV8_STRW_IP(1, 0),
+		[ARMV8_OPC_STRD_IP]	= ARMV8_STRD_IP(1, 0),
 };
 
 static const uint32_t t32_opcodes[ARMV8_OPC_NUM] = {
