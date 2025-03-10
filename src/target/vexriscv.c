@@ -714,8 +714,43 @@ static int vexriscv_init_target(struct command_context *cmd_ctx, struct target *
 			LOG_DEBUG("TCP connection to target etablished");
 		}
 	}
+
 	vexriscv_semihosting_init(target);
+
 	return ERROR_OK;
+}
+
+static void flush_network_socket(struct target *target)
+{
+	struct vexriscv_common *vexriscv = target_to_vexriscv(target);
+	uint32_t buffer;
+	ssize_t ret = 0;
+	int loopCount = 0;
+	if (vexriscv->networkProtocol == NP_IVERILOG) {
+		for (loopCount = 0; loopCount < 5; loopCount++) {
+			ret = recv(vexriscv->clientSocket, &buffer, 4, 0);
+			LOG_DEBUG("Flush %ld bytes data 'NP_IVERILOG', iteration %d, data = %x", ret, loopCount, buffer);
+		}
+		ret = recv(vexriscv->clientSocket, &buffer, 3, 0);
+		LOG_DEBUG("Flush %ld bytes data 'NP_IVERILOG', iteration %d, data = %x", ret, loopCount, buffer);
+	}
+	else if (vexriscv->networkProtocol == NP_ETHERBONE) {
+		for (loopCount = 0; loopCount < 5; loopCount++) {
+			ret = read(vexriscv->clientSocket, &buffer, 4);
+			LOG_DEBUG("Flush %ld bytes data 'NP_ETHERBONE', iteration %d, data = %x", ret, loopCount, buffer);
+		}
+		ret = read(vexriscv->clientSocket, &buffer, 3);
+		LOG_DEBUG("Flush %ld bytes data 'NP_ETHERBONE', iteration %d, data = %x", ret, loopCount, buffer);
+	}
+
+	if (ret < 0) {
+       // handle error
+       LOG_ERROR("ERROR: Error while reading from socket: %s", strerror(errno));
+    } else if (ret == 0) {
+       // handle closed connection
+       LOG_INFO("INFO: Connection closed"); 
+    }
+	
 }
 
 static int vexriscv_arch_state(struct target *target)
@@ -1153,8 +1188,9 @@ static int vexriscv_network_read(struct vexriscv_common *vexriscv, void *buffer,
 		uint8_t wb_buffer[20];
 		uint32_t intermediate;
 		int ret = read(vexriscv->clientSocket, wb_buffer, sizeof(wb_buffer));
-		if (ret != sizeof(wb_buffer))
+		if (ret != sizeof(wb_buffer)) {
 			return 0;
+		}		
 		memcpy(&intermediate, &wb_buffer[16], sizeof(intermediate));
 		intermediate = ntohl(intermediate);
 		memcpy(buffer, &intermediate, sizeof(intermediate));
@@ -2062,6 +2098,9 @@ static int vexriscv_examine(struct target *target)
 				vexriscv->vjtagParams->m_width = m_width;
 			}
 		}
+
+		// Patch to extract litex_server info out of socket
+		flush_network_socket(target);
 
 		uint32_t halted;
 		int retval = vexriscv_is_halted(target,&halted);

@@ -38,4 +38,5 @@ static int vexriscv_read_memory(struct target *target, target_addr_t address, ui
 //static int vexriscv_write32(struct target *target, uint32_t address,uint32_t data);
 //static int vexriscv_read32(struct target *target, uint32_t address,uint32_t *data);
 static int vexriscv_halt(struct target *target);
+static void flush_network_socket(struct target *target);
 #endif /* __vexriscv_H__ */
